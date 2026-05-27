@@ -15,3 +15,20 @@ arborinth = "arborinth:main"
 [build-system]
 requires = ["uv_build>=0.9.30,<0.10.0"]
 build-backend = "uv_build"
+
+[tool.ruff.lint]
+# Enable all rules by default
+select = ["ALL"]
+
+# Fix all fixable violations by default
+fixable = ["ALL"]
+unfixable = []
+
+ignore = [
+    "D213", # `multi-line-summary-second-line` (conflicts with D212)
+    "D203",  # `incorrect-blank-line-before-class` (conflicts with D211)
+    "COM812",  # `missing-trailing-comma` (conflicts with formatter)
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
