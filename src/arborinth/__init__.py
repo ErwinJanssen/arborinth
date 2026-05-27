@@ -1,5 +1,1 @@
-# noqa: D104
-
-
-def main() -> None:  # noqa: D103
-    print("Hello from arborinth!")  # noqa: T201
+"""Arborinth - Safely run untrusted code in isolated environments."""

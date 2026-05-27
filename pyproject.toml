@@ -7,10 +7,10 @@ authors = [
     { name = "Erwin Janssen", email = "code@erwinjanssen.nl" }
 ]
 requires-python = ">=3.12"
-dependencies = []
+dependencies = ["click"]
 
 [project.scripts]
-arborinth = "arborinth:main"
+arborinth = "arborinth.cli:main"
 
 [build-system]
 requires = ["uv_build>=0.9.30,<0.10.0"]
