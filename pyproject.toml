@@ -21,6 +21,11 @@ dev = [
     "pytest>=9.0.3",
 ]
 
+[tool.mdformat]
+# Apply consecutive numbering to ordered lists, instead of using `1.` for each
+# item.
+number = true
+
 [tool.ruff.lint]
 # Enable all rules by default
 select = ["ALL"]

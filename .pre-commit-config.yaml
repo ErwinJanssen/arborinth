@@ -14,3 +14,14 @@ repos:
         name: ruff check
       - id: ruff-format
         name: ruff format
+
+  - repo: https://github.com/hukkin/mdformat
+    rev: 1.0.0
+    hooks:
+      - id: mdformat
+        additional_dependencies:
+          # Allow configuration of mdformat via pyproject.toml.
+          - mdformat-pyproject
+
+          # Format Python code blocks with Ruff.
+          - mdformat-ruff
