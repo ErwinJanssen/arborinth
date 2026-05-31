@@ -59,8 +59,47 @@ heart of it all.
 
 ## Status
 
-Arborinth is currently in the **design and exploration phase**.
+Arborinth is currently in the **early development phase**.
 
-No implementation exists yet. The repository serves as a place to document
-ideas, architecture, constraints and design decisions before development
-begins. Contributions, ideas and feedback are welcome!
+A basic implementation of the `Project` module exists and can be used to inspect
+the Git repository root from a given working directory.
+
+## Usage
+
+### Project Command
+
+The `project` subcommand provides operations for managing Arborinth projects.
+
+```bash
+# Display information about the current project (shows Git root)
+arborinth project info
+
+# Use a specific working directory
+arborinth project info --workdir /path/to/dir
+```
+
+### Project Module (Python API)
+
+The `Project` class can be used programmatically:
+
+```python
+from arborinth import Project
+
+# Create a project with the current working directory
+project = Project()
+
+# Get the Git repository root
+root = project.repo_root_path
+print(f"Repository root: {root}")
+
+# Specify a different working directory
+project = Project(workdir="/path/to/dir")
+root = project.repo_root_path
+```
+
+The `Project` class validates that the working directory exists and is within
+a Git repository.
+
+## Development
+
+Contributions, ideas and feedback are welcome!
