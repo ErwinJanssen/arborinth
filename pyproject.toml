@@ -39,6 +39,12 @@ ignore = [
     "D203",  # `incorrect-blank-line-before-class` (conflicts with D211)
     "COM812",  # `missing-trailing-comma` (conflicts with formatter)
 
+    # This rule triggers every time a variable is used in `subprocess.run`,
+    # warning that the input should be validated. However, there does not seem
+    # to be a way to do so in such a way that this rule is satisfied. This rule
+    # is therefore disabled.
+    "S603",  # `subprocess-without-shell-equals-true`
+
     # This rule is too strict, as it requires all executable paths to be
     # hardcoded. There is little value in this, and it is not practical.
     # Hardcoded paths also prevent the use of tools like Nix
