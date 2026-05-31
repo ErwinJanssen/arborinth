@@ -6,6 +6,8 @@ import subprocess
 import click.testing
 import pytest
 
+from arborinth import Project
+
 
 @pytest.fixture
 def cli_runner() -> click.testing.CliRunner:
@@ -18,3 +20,9 @@ def tmp_git_repo(tmp_path: pathlib.Path) -> pathlib.Path:
     """Create a temporary directory initialized as a git repository."""
     subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True)
     return tmp_path
+
+
+@pytest.fixture
+def tmp_project(tmp_git_repo: pathlib.Path) -> Project:
+    """Create a `Project` for the temporary git repository."""
+    return Project(workdir=tmp_git_repo)

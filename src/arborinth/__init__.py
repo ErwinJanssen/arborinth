@@ -2,3 +2,4 @@
 # ruff: noqa: F401 (unused-import)
 
 from .project import Project
+from .workspace import Workspace
