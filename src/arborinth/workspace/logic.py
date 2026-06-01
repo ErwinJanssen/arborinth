@@ -12,6 +12,8 @@ import dataclasses
 import typing
 
 if typing.TYPE_CHECKING:
+    import pathlib
+
     from arborinth import Project
 
 
@@ -29,3 +31,12 @@ class Workspace:
 
     name: str
     project: Project
+
+    @property
+    def root_path(self) -> pathlib.Path:
+        """Path to this specific workspace directory.
+
+        Returns:
+            The absolute path to the workspace directory.
+        """
+        return self.project.workspace_root_path / self.name

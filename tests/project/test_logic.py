@@ -105,3 +105,12 @@ class TestRepoRootPath:
             RuntimeError, match=r"Cannot determine Git root.*Git is not installed"
         ):
             _ = project.repo_root_path
+
+
+class TestWorkspaceRootPath:
+    """Tests for the `workspace_root_path` property."""
+
+    def test_workspace_root_path(self, tmp_project: logic.Project) -> None:
+        """`workspace_root_path` should return correct path."""
+        expected = tmp_project.repo_root_path / ".arborinth" / "workspaces"
+        assert tmp_project.workspace_root_path == expected

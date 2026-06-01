@@ -4,6 +4,8 @@ This module contains the core `Project` class which represents a top-level
 Arborinth project, typically associated with a Git repository.
 """
 
+from __future__ import annotations
+
 import dataclasses
 import pathlib
 import subprocess
@@ -87,3 +89,12 @@ class Project:
             raise RuntimeError(message) from exc
 
         return pathlib.Path(result.stdout.strip())
+
+    @property
+    def workspace_root_path(self) -> pathlib.Path:
+        """Root path for workspaces in this project.
+
+        Returns:
+            The absolute path to the `.arborinth/workspaces` directory.
+        """
+        return self.repo_root_path / ".arborinth" / "workspaces"
