@@ -116,3 +116,65 @@ class TestCreateCommand:
         assert result.exit_code != 0
         assert "Error:" in result.output
         assert "Cannot determine Git root" in result.output
+
+
+class TestListCommand:
+    """Tests for the `workspace list` command."""
+
+    def test_list_help(self, cli_runner: click.testing.CliRunner) -> None:
+        """--help should display help message for `list` command."""
+        result = cli_runner.invoke(cli.list_, ["--help"])
+        assert result.exit_code == 0
+        assert "List workspaces for the project" in result.stdout
+
+    def test_list_empty(
+        self, cli_runner: click.testing.CliRunner, tmp_git_repo: pathlib.Path
+    ) -> None:
+        """List command with no workspaces should show empty message."""
+        with cli_runner.isolated_filesystem(temp_dir=tmp_git_repo):
+            result = cli_runner.invoke(cli.list_, [])
+            assert result.exit_code != 0
+            assert "No workspaces found" in result.stderr
+
+    def test_list_workspaces(
+        self, cli_runner: click.testing.CliRunner, tmp_git_repo: pathlib.Path
+    ) -> None:
+        """List command should list existing workspaces."""
+        with cli_runner.isolated_filesystem(temp_dir=tmp_git_repo):
+            # Create some workspaces first
+            cli_runner.invoke(cli.create, ["ws1"])
+            cli_runner.invoke(cli.create, ["ws2"])
+
+            result = cli_runner.invoke(cli.list_, [])
+            assert result.exit_code == 0
+            assert "ws1" in result.stdout
+            assert "ws2" in result.stdout
+
+    def test_list_explicit_workdir(
+        self, cli_runner: click.testing.CliRunner, tmp_git_repo: pathlib.Path
+    ) -> None:
+        """List command with explicit workdir should work."""
+        # Create a workspace first
+        cli_runner.invoke(cli.create, ["--workdir", str(tmp_git_repo), "remote_ws"])
+
+        result = cli_runner.invoke(cli.list_, ["--workdir", str(tmp_git_repo)])
+        assert result.exit_code == 0
+        assert "remote_ws" in result.stdout
+
+    def test_list_nonexistent_workdir(
+        self, cli_runner: click.testing.CliRunner
+    ) -> None:
+        """List command with non-existent workdir should fail."""
+        result = cli_runner.invoke(cli.list_, ["--workdir", "/nonexistent/path/12345"])
+        assert result.exit_code != 0
+        assert "Error:" in result.output
+        assert "must be an existing directory" in result.output
+
+    def test_list_outside_git_repo(
+        self, cli_runner: click.testing.CliRunner, tmp_path: pathlib.Path
+    ) -> None:
+        """List command from outside git repo should fail."""
+        result = cli_runner.invoke(cli.list_, ["--workdir", str(tmp_path)])
+        assert result.exit_code != 0
+        assert "Error:" in result.output
+        assert "Cannot determine Git root" in result.output

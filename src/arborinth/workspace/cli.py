@@ -41,3 +41,28 @@ def create(workdir: pathlib.Path, name: str) -> None:
     except (ValueError, RuntimeError, OSError) as exc:
         message = f"Error: {exc}"
         raise click.ClickException(message) from exc
+
+
+@workspace.command(name="list")
+@click.option(
+    "--workdir",
+    "-C",
+    type=click.Path(file_okay=False, dir_okay=True, path_type=pathlib.Path),
+    default=".",
+    help="Working directory within the Git repository.",
+)
+def list_(workdir: pathlib.Path) -> None:
+    """List workspaces for the project."""
+    try:
+        project = Project(workdir=workdir)
+        workspaces = project.workspaces
+
+        if not workspaces:
+            message = "No workspaces found for this project."
+            raise click.ClickException(message)
+
+        for ws in workspaces:
+            click.echo(ws.name)
+    except (ValueError, RuntimeError) as exc:
+        message = f"Error: {exc}"
+        raise click.ClickException(message) from exc

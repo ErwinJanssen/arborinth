@@ -138,3 +138,24 @@ class TestCreateWorkspace:
 
         with pytest.raises(FileExistsError):
             tmp_project.create_workspace("duplicate")
+
+
+class TestWorkspaces:
+    """Tests for the `workspaces` property."""
+
+    def test_workspaces_empty(self, tmp_project: logic.Project) -> None:
+        """Workspaces should return empty list when no workspaces exist."""
+        assert tmp_project.workspaces == []
+
+    def test_workspaces_returns_workspace_objects(
+        self, tmp_project: logic.Project
+    ) -> None:
+        """Workspaces should return list of Workspace objects."""
+        workspace_names = {"workspace1", "workspace2"}
+        for name in workspace_names:
+            tmp_project.create_workspace(name)
+
+        workspaces = tmp_project.workspaces
+        assert len(workspaces) == len(workspace_names)
+        assert all(isinstance(ws, logic.Workspace) for ws in workspaces)
+        assert {ws.name for ws in workspaces} == workspace_names

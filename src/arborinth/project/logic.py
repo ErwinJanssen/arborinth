@@ -118,3 +118,19 @@ class Project:
         workspace_path = self.workspace_root_path / name
         workspace_path.mkdir(parents=True, exist_ok=False)
         return Workspace(name=name, project=self)
+
+    @property
+    def workspaces(self) -> list[Workspace]:
+        """List of workspaces for this project.
+
+        Returns:
+            A list of Workspace objects that exist for the project.
+        """
+        try:
+            return [
+                Workspace(name=entry.name, project=self)
+                for entry in self.workspace_root_path.iterdir()
+                if entry.is_dir()
+            ]
+        except FileNotFoundError:
+            return []
