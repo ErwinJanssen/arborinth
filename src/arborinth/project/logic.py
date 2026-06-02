@@ -10,6 +10,8 @@ import dataclasses
 import pathlib
 import subprocess
 
+from arborinth.workspace import Workspace
+
 
 @dataclasses.dataclass
 class Project:
@@ -98,3 +100,21 @@ class Project:
             The absolute path to the `.arborinth/workspaces` directory.
         """
         return self.repo_root_path / ".arborinth" / "workspaces"
+
+    def create_workspace(self, name: str) -> Workspace:
+        """Create a new workspace.
+
+        Creates a workspace with the given name in the workspace root directory.
+
+        Args:
+            name: The name of the workspace to create.
+
+        Returns:
+            A `Workspace` instance for the created workspace.
+
+        Raises:
+            FileExistsError: If a workspace with this name already exists.
+        """
+        workspace_path = self.workspace_root_path / name
+        workspace_path.mkdir(parents=True, exist_ok=False)
+        return Workspace(name=name, project=self)

@@ -5,6 +5,7 @@ import subprocess
 
 import pytest
 
+from arborinth import Workspace
 from arborinth.project import logic
 
 
@@ -114,3 +115,26 @@ class TestWorkspaceRootPath:
         """`workspace_root_path` should return correct path."""
         expected = tmp_project.repo_root_path / ".arborinth" / "workspaces"
         assert tmp_project.workspace_root_path == expected
+
+
+class TestCreateWorkspace:
+    """Tests for the `create_workspace` method."""
+
+    def test_create_workspace(self, tmp_project: logic.Project) -> None:
+        """`create_workspace` should create a Workspace instance."""
+        workspace = tmp_project.create_workspace("test_workspace")
+
+        assert isinstance(workspace, Workspace)
+        assert workspace.name == "test_workspace"
+        assert workspace.project == tmp_project
+        assert workspace.root_path == tmp_project.workspace_root_path / "test_workspace"
+        assert workspace.root_path.is_dir()
+
+    def test_create_workspace_duplicate_raises(
+        self, tmp_project: logic.Project
+    ) -> None:
+        """`create_workspace` should raise `FileExistsError` for duplicate name."""
+        tmp_project.create_workspace("duplicate")
+
+        with pytest.raises(FileExistsError):
+            tmp_project.create_workspace("duplicate")
