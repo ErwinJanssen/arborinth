@@ -10,6 +10,7 @@ import dataclasses
 import pathlib
 import subprocess
 
+from arborinth import _util
 from arborinth.workspace import Workspace
 
 
@@ -113,8 +114,11 @@ class Project:
             A `Workspace` instance for the created workspace.
 
         Raises:
+            ValueError: If the workspace name is invalid.
             FileExistsError: If a workspace with this name already exists.
         """
+        _util.validate_workspace_name(name)
+
         workspace_path = self.workspace_root_path / name
         workspace_path.mkdir(parents=True, exist_ok=False)
         return Workspace(name=name, project=self)

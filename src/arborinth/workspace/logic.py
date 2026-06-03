@@ -12,6 +12,8 @@ import dataclasses
 import shutil
 import typing
 
+from arborinth import _util
+
 if typing.TYPE_CHECKING:
     import pathlib
 
@@ -37,8 +39,11 @@ class Workspace:
         """Validate the workspace after initialization.
 
         Raises:
+            ValueError: If the workspace name is invalid.
             FileNotFoundError: If the workspace directory does not exist.
         """
+        _util.validate_workspace_name(self.name)
+
         if not self.root_path.is_dir():
             message = f"Workspace '{self.name}' does not exist at {self.root_path}"
             raise FileNotFoundError(message)

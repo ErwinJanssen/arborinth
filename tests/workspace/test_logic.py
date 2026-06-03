@@ -8,6 +8,7 @@ import typing
 import pytest
 
 from arborinth.workspace import logic
+from tests import INVALID_WORKSPACE_NAME_INPUTS
 
 if typing.TYPE_CHECKING:
     from arborinth import Project
@@ -26,6 +27,18 @@ class TestWorkspaceInit:
         """`Workspace` with non-existent name should raise FileNotFoundError."""
         with pytest.raises(FileNotFoundError, match="does not exist"):
             logic.Workspace(name="nonexistent", project=tmp_project)
+
+    @pytest.mark.parametrize(**INVALID_WORKSPACE_NAME_INPUTS)
+    def test_invalid_name_raises(
+        self,
+        tmp_project: Project,
+        name: str,
+        exception_type: type[Exception],
+        message_substring: str,
+    ) -> None:
+        """`Workspace` with invalid name should raise ValueError."""
+        with pytest.raises(exception_type, match=message_substring):
+            logic.Workspace(name=name, project=tmp_project)
 
 
 class TestWorkspacePaths:

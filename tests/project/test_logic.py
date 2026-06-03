@@ -7,6 +7,7 @@ import pytest
 
 from arborinth import Workspace
 from arborinth.project import logic
+from tests import INVALID_WORKSPACE_NAME_INPUTS
 
 
 class TestProjectInit:
@@ -138,6 +139,18 @@ class TestCreateWorkspace:
 
         with pytest.raises(FileExistsError):
             tmp_project.create_workspace("duplicate")
+
+    @pytest.mark.parametrize(**INVALID_WORKSPACE_NAME_INPUTS)
+    def test_invalid_name_raises(
+        self,
+        tmp_project: logic.Project,
+        name: str,
+        exception_type: type[Exception],
+        message_substring: str,
+    ) -> None:
+        """`Workspace` with invalid name should raise ValueError."""
+        with pytest.raises(exception_type, match=message_substring):
+            tmp_project.create_workspace(name)
 
 
 class TestWorkspace:
