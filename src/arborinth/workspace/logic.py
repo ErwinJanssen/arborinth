@@ -9,6 +9,7 @@ repository.
 from __future__ import annotations
 
 import dataclasses
+import shutil
 import typing
 
 if typing.TYPE_CHECKING:
@@ -50,3 +51,18 @@ class Workspace:
             The absolute path to the workspace directory.
         """
         return self.project.workspace_root_path / self.name
+
+    def delete(self) -> None:
+        """Delete this workspace.
+
+        Removes the workspace directory from the filesystem, including all
+        its contents.
+
+        Raises:
+            FileNotFoundError: If the workspace directory does not exist.
+            OSError: If the directory cannot be removed.
+        """
+        if not self.root_path.is_dir():
+            message = f"Workspace '{self.name}' does not exist at {self.root_path}"
+            raise FileNotFoundError(message)
+        shutil.rmtree(self.root_path)

@@ -118,6 +118,78 @@ class TestCreateCommand:
         assert "Cannot determine Git root" in result.output
 
 
+class TestDeleteCommand:
+    """Tests for the `workspace delete` command."""
+
+    def test_delete_help(self, cli_runner: click.testing.CliRunner) -> None:
+        """--help should display help message for `delete` command."""
+        result = cli_runner.invoke(cli.delete, ["--help"])
+        assert result.exit_code == 0
+        assert "Delete a workspace" in result.stdout
+        assert "NAME" in result.stdout
+
+    def test_delete_workspace(
+        self, cli_runner: click.testing.CliRunner, tmp_git_repo: pathlib.Path
+    ) -> None:
+        """Delete command should remove the workspace directory."""
+        with cli_runner.isolated_filesystem(temp_dir=tmp_git_repo):
+            # Create a workspace first
+            cli_runner.invoke(cli.create, ["delete_test"])
+
+            result = cli_runner.invoke(cli.delete, ["delete_test"])
+            assert result.exit_code == 0
+            assert "Deleted workspace: delete_test" in result.stdout
+
+            # Verify it's actually deleted
+            expected_path = tmp_git_repo / ".arborinth" / "workspaces" / "delete_test"
+            assert not expected_path.exists()
+
+    def test_delete_explicit_workdir(
+        self, cli_runner: click.testing.CliRunner, tmp_git_repo: pathlib.Path
+    ) -> None:
+        """Delete command with explicit workdir should work."""
+        # Create a workspace first
+        cli_runner.invoke(cli.create, ["--workdir", str(tmp_git_repo), "remote_delete"])
+
+        result = cli_runner.invoke(
+            cli.delete, ["--workdir", str(tmp_git_repo), "remote_delete"]
+        )
+        assert result.exit_code == 0
+        assert "Deleted workspace: remote_delete" in result.stdout
+
+    def test_delete_nonexistent_workspace(
+        self, cli_runner: click.testing.CliRunner, tmp_git_repo: pathlib.Path
+    ) -> None:
+        """Delete command with non-existent workspace should fail."""
+        with cli_runner.isolated_filesystem(temp_dir=tmp_git_repo):
+            result = cli_runner.invoke(cli.delete, ["nonexistent"])
+            assert result.exit_code != 0
+            assert "Error:" in result.output
+            assert "does not exist" in result.output
+
+    def test_delete_nonexistent_workdir(
+        self, cli_runner: click.testing.CliRunner
+    ) -> None:
+        """Delete command with non-existent workdir should fail."""
+        result = cli_runner.invoke(
+            cli.delete, ["--workdir", "/nonexistent/path/12345", "some_workspace"]
+        )
+        assert result.exit_code != 0
+        assert "Error:" in result.output
+        assert "must be an existing directory" in result.output
+
+    def test_delete_outside_git_repo(
+        self, cli_runner: click.testing.CliRunner, tmp_path: pathlib.Path
+    ) -> None:
+        """Delete command from outside git repo should fail."""
+        result = cli_runner.invoke(
+            cli.delete, ["--workdir", str(tmp_path), "workspace"]
+        )
+        assert result.exit_code != 0
+        assert "Error:" in result.output
+        assert "Cannot determine Git root" in result.output
+
+
 class TestInfoCommand:
     """Tests for the `workspace info` command."""
 

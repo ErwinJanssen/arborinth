@@ -90,3 +90,27 @@ def info(workdir: pathlib.Path, name: str) -> None:
     except (ValueError, RuntimeError, OSError) as exc:
         message = f"Error: {exc}"
         raise click.ClickException(message) from exc
+
+
+@workspace.command()
+@click.argument("name")
+@click.option(
+    "--workdir",
+    "-C",
+    type=click.Path(file_okay=False, dir_okay=True, path_type=pathlib.Path),
+    default=".",
+    help="Working directory within the Git repository.",
+)
+def delete(workdir: pathlib.Path, name: str) -> None:
+    """Delete a workspace.
+
+    Removes the workspace directory from the filesystem.
+    """
+    try:
+        project = Project(workdir=workdir)
+        workspace = project.workspace(name)
+        workspace.delete()
+        click.echo(f"Deleted workspace: {name}")
+    except (ValueError, RuntimeError, OSError) as exc:
+        message = f"Error: {exc}"
+        raise click.ClickException(message) from exc

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import shutil
 import typing
 
 import pytest
@@ -36,3 +37,25 @@ class TestWorkspacePaths:
         workspace = tmp_project.workspace("test")
         expected = tmp_project.workspace_root_path / "test"
         assert workspace.root_path == expected
+
+
+class TestWorkspaceDelete:
+    """Tests for the `delete` method."""
+
+    def test_delete_workspace(self, tmp_project: Project) -> None:
+        """`delete` should remove the workspace directory."""
+        workspace = tmp_project.create_workspace("to_delete")
+        assert workspace.root_path.is_dir()
+
+        workspace.delete()
+        assert not workspace.root_path.exists()
+
+    def test_delete_nonexistent_workspace(self, tmp_project: Project) -> None:
+        """`delete` should raise FileNotFoundError for non-existent workspace."""
+        workspace = tmp_project.create_workspace("to_delete")
+
+        # Remove the workspace directory to simulate non-existence
+        shutil.rmtree(workspace.root_path)
+
+        with pytest.raises(FileNotFoundError, match="does not exist"):
+            workspace.delete()
