@@ -24,8 +24,9 @@ if typing.TYPE_CHECKING:
 class Workspace:
     """An isolated workspace for untrusted code execution.
 
-    A workspace is a clone of a Git repository where untrusted code can
-    perform operations without affecting the original repository.
+    A workspace contains a clone of a Git repository (in the `workdir`
+    subdirectory) where untrusted code can perform operations without affecting
+    the original repository.
 
     Attributes:
         name: The name of the workspace.
@@ -56,6 +57,16 @@ class Workspace:
             The absolute path to the workspace directory.
         """
         return self.project.workspace_root_path / self.name
+
+    @property
+    def workdir_path(self) -> pathlib.Path:
+        """Path to the workdir (Git repository clone) within this workspace.
+
+        Returns:
+            The absolute path to the workspace's workdir directory, which
+            contains the cloned Git repository.
+        """
+        return self.root_path / "workdir"
 
     def delete(self) -> None:
         """Delete this workspace.

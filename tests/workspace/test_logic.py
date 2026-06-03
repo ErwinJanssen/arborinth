@@ -51,6 +51,14 @@ class TestWorkspacePaths:
         expected = tmp_project.workspace_root_path / "test"
         assert workspace.root_path == expected
 
+    def test_workdir_path(self, tmp_project: Project) -> None:
+        """workdir_path should return correct path to workdir subdirectory."""
+        tmp_project.create_workspace("test")
+        workspace = tmp_project.workspace("test")
+
+        expected = tmp_project.workspace_root_path / "test" / "workdir"
+        assert workspace.workdir_path == expected
+
 
 class TestWorkspaceDelete:
     """Tests for the `delete` method."""
