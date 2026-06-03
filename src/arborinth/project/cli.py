@@ -36,5 +36,5 @@ def info(workdir: pathlib.Path) -> None:
         project = logic.Project(workdir=workdir)
         click.echo(f"Project root: {project.repo_root_path}")
     except (ValueError, RuntimeError) as exc:
-        click.echo(f"Error: {exc}", err=True)
-        raise click.Abort(1) from exc
+        message = f"Error: {exc}"
+        raise click.ClickException(message) from exc
