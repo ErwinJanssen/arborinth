@@ -5,7 +5,9 @@ import subprocess
 
 import pytest
 
+from arborinth import Workspace
 from arborinth.project import logic
+from tests import INVALID_WORKSPACE_NAME_INPUTS
 
 
 class TestProjectInit:
@@ -105,3 +107,139 @@ class TestRepoRootPath:
             RuntimeError, match=r"Cannot determine Git root.*Git is not installed"
         ):
             _ = project.repo_root_path
+
+
+class TestWorkspaceRootPath:
+    """Tests for the `workspace_root_path` property."""
+
+    def test_workspace_root_path(self, tmp_project: logic.Project) -> None:
+        """`workspace_root_path` should return correct path."""
+        expected = tmp_project.repo_root_path / ".arborinth" / "workspaces"
+        assert tmp_project.workspace_root_path == expected
+
+
+class TestCreateWorkspace:
+    """Tests for the `create_workspace` method."""
+
+    def test_create_workspace(self, tmp_project: logic.Project) -> None:
+        """`create_workspace` should create a Workspace instance."""
+        workspace = tmp_project.create_workspace("test_workspace")
+
+        assert isinstance(workspace, Workspace)
+        assert workspace.name == "test_workspace"
+        assert workspace.project == tmp_project
+        assert workspace.root_path == tmp_project.workspace_root_path / "test_workspace"
+        assert workspace.root_path.is_dir()
+
+    def test_create_workspace_duplicate_raises(
+        self, tmp_project: logic.Project
+    ) -> None:
+        """`create_workspace` should raise `FileExistsError` for duplicate name."""
+        tmp_project.create_workspace("duplicate")
+
+        with pytest.raises(FileExistsError):
+            tmp_project.create_workspace("duplicate")
+
+    @pytest.mark.parametrize(**INVALID_WORKSPACE_NAME_INPUTS)
+    def test_invalid_name_raises(
+        self,
+        tmp_project: logic.Project,
+        name: str,
+        exception_type: type[Exception],
+        message_substring: str,
+    ) -> None:
+        """`Workspace` with invalid name should raise ValueError."""
+        with pytest.raises(exception_type, match=message_substring):
+            tmp_project.create_workspace(name)
+
+    def test_create_workspace_creates_git_repo(
+        self, tmp_project: logic.Project
+    ) -> None:
+        """`create_workspace` should create a valid Git repository in workdir."""
+        workspace = tmp_project.create_workspace("test_git_workspace")
+
+        # Check that the `workspace.workdir_path` directory contains a .git
+        # directory
+        assert workspace.workdir_path.is_dir()
+        assert (workspace.workdir_path / ".git").is_dir()
+
+        # Check that git commands work in the workspace.workdir_path directory
+        proc = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            cwd=workspace.workdir_path,
+            capture_output=True,
+            check=True,
+            text=True,
+        )
+        assert proc.stdout.strip() == str(workspace.workdir_path)
+
+    def test_create_workspace_git_not_installed(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_project: logic.Project
+    ) -> None:
+        """`create_workspace` should raise RuntimeError when git is not installed."""
+
+        def mock_run(*_args: object, **_kwargs: object) -> None:
+            message = "git not found"
+            raise FileNotFoundError(message)
+
+        monkeypatch.setattr(subprocess, "run", mock_run)
+
+        with pytest.raises(RuntimeError, match="Git is not installed"):
+            tmp_project.create_workspace("test_no_git")
+
+    def test_create_workspace_clone_failure(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_project: logic.Project
+    ) -> None:
+        """`create_workspace` should raise RuntimeError when git clone fails."""
+        original_run = subprocess.run
+
+        def mock_run(cmd: list[str], *args: object, **kwargs: object) -> None:
+            # Only mock the git clone command, let other git commands pass through
+            if cmd and cmd[0] == "git" and len(cmd) > 1 and cmd[1] == "clone":
+                exc = subprocess.CalledProcessError(
+                    128, cmd, stderr="repository not found"
+                )
+                raise exc
+            return original_run(cmd, *args, **kwargs)
+
+        monkeypatch.setattr(subprocess, "run", mock_run)
+
+        with pytest.raises(RuntimeError, match="Failed to clone repository"):
+            tmp_project.create_workspace("test_clone_fail")
+
+
+class TestWorkspace:
+    """Tests for the `workspace` method."""
+
+    def test_workspace_retrieves_existing(self, tmp_project: logic.Project) -> None:
+        """`workspace` should retrieve an existing workspace."""
+        created_workspace = tmp_project.create_workspace("test_workspace")
+        retrieved_workspace = tmp_project.workspace(created_workspace.name)
+
+        assert retrieved_workspace == created_workspace
+
+    def test_workspace_nonexistent_raises(self, tmp_project: logic.Project) -> None:
+        """`workspace` should raise FileNotFoundError for non-existent workspace."""
+        with pytest.raises(FileNotFoundError, match="does not exist"):
+            tmp_project.workspace("nonexistent")
+
+
+class TestWorkspaces:
+    """Tests for the `workspaces` property."""
+
+    def test_workspaces_empty(self, tmp_project: logic.Project) -> None:
+        """Workspaces should return empty list when no workspaces exist."""
+        assert tmp_project.workspaces == []
+
+    def test_workspaces_returns_workspace_objects(
+        self, tmp_project: logic.Project
+    ) -> None:
+        """Workspaces should return list of Workspace objects."""
+        workspace_names = {"workspace1", "workspace2"}
+        for name in workspace_names:
+            tmp_project.create_workspace(name)
+
+        workspaces = tmp_project.workspaces
+        assert len(workspaces) == len(workspace_names)
+        assert all(isinstance(ws, logic.Workspace) for ws in workspaces)
+        assert {ws.name for ws in workspaces} == workspace_names

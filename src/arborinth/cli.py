@@ -3,6 +3,7 @@
 import click
 
 from arborinth.project.cli import project
+from arborinth.workspace.cli import workspace
 
 
 @click.group()
@@ -12,3 +13,4 @@ def main() -> None:
 
 
 main.add_command(project)
+main.add_command(workspace)

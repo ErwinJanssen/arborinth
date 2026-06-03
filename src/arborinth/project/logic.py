@@ -4,9 +4,15 @@ This module contains the core `Project` class which represents a top-level
 Arborinth project, typically associated with a Git repository.
 """
 
+from __future__ import annotations
+
 import dataclasses
 import pathlib
+import shutil
 import subprocess
+
+from arborinth import _util
+from arborinth.workspace import Workspace
 
 
 @dataclasses.dataclass
@@ -87,3 +93,126 @@ class Project:
             raise RuntimeError(message) from exc
 
         return pathlib.Path(result.stdout.strip())
+
+    @property
+    def workspace_root_path(self) -> pathlib.Path:
+        """Root path for workspaces in this project.
+
+        Returns:
+            The absolute path to the `.arborinth/workspaces` directory.
+        """
+        return self.repo_root_path / ".arborinth" / "workspaces"
+
+    def create_workspace(self, name: str) -> Workspace:
+        """Create a new workspace.
+
+        Creates a workspace with the given name in the project's workspace
+        directory. The workspace is initialized by cloning the project's Git
+        repository into the workspace's `workdir` subdirectory. The clone uses
+        an isolated Git configuration to prevent the host system's Git config
+        from affecting the operation.
+
+        Args:
+            name: The name of the workspace to create.
+
+        Returns:
+            A `Workspace` instance for the created workspace.
+
+        Raises:
+            ValueError: If the workspace name is invalid.
+            FileExistsError: If a workspace with this name already exists.
+            RuntimeError: If the Git repository cannot be cloned.
+        """
+        _util.validate_workspace_name(name)
+
+        workspace_path = self.workspace_root_path / name
+
+        # Check if workspace already exists
+        if workspace_path.exists():
+            message = f"Workspace '{name}' already exists at {workspace_path}"
+            raise FileExistsError(message)
+
+        # Ensure the project workspace root directory exists
+        self.workspace_root_path.mkdir(parents=True, exist_ok=True)
+
+        # Create the workspace directory structure
+        workspace_path.mkdir()
+        workdir_path = workspace_path / "workdir"
+
+        # Clone the repository into the workspace/workdir directory. Do not use
+        # the host system's Git configuration for improved isolation and
+        # reproducibility. Also disable terminal prompts to prevent interactive
+        # behavior.
+        env = {
+            "GIT_CONFIG_GLOBAL": "/dev/null",
+            "GIT_CONFIG_SYSTEM": "/dev/null",
+            "GIT_TERMINAL_PROMPT": "0",
+        }
+
+        try:
+            subprocess.run(
+                [
+                    "git",
+                    "clone",
+                    # Use `--no-local` to prevent hardlinks (ensures full copy
+                    # for isolation)
+                    "--no-local",
+                    str(self.repo_root_path),
+                    str(workdir_path),
+                ],
+                cwd=self.workdir,
+                env=env,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+        except subprocess.CalledProcessError as exc:
+            # Clean up the directory if clone failed
+            if workspace_path.exists():
+                shutil.rmtree(workspace_path)
+            message = (
+                f"Failed to clone repository into workspace '{name}': "
+                f"{exc.stderr.strip() if exc.stderr else 'unknown error'}"
+            )
+            raise RuntimeError(message) from exc
+        except FileNotFoundError as exc:
+            # Clean up the directory if git is not found
+            if workspace_path.exists():
+                shutil.rmtree(workspace_path)
+            message = (
+                f"Cannot clone repository for workspace '{name}': "
+                f"Git is not installed or not found in PATH."
+            )
+            raise RuntimeError(message) from exc
+
+        return Workspace(name=name, project=self)
+
+    @property
+    def workspaces(self) -> list[Workspace]:
+        """List of workspaces for this project.
+
+        Returns:
+            A list of Workspace objects that exist for the project.
+        """
+        try:
+            return [
+                Workspace(name=entry.name, project=self)
+                for entry in self.workspace_root_path.iterdir()
+                if entry.is_dir()
+            ]
+        except FileNotFoundError:
+            return []
+
+    def workspace(self, name: str) -> Workspace:
+        """Retrieve a workspace by name.
+
+        Args:
+            name: The name of the workspace to retrieve.
+
+        Returns:
+            A `Workspace` instance for the specified workspace.
+
+        Raises:
+            FileNotFoundError: If no workspace with this name exists.
+        """
+        return Workspace(name=name, project=self)

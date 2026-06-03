@@ -61,12 +61,28 @@ heart of it all.
 
 Arborinth is currently in the **early development phase**.
 
-A basic implementation of the `Project` module exists and can be used to inspect
-the Git repository root from a given working directory.
+A basic implementation of the `project` and `workspace` modules exists. The
+`project` module can be used to inspect the Git repository root from a given
+working directory, and the `workspace` module provides isolated workspaces where
+untrusted code can operate safely.
+
+## Concepts
+
+### Project
+
+A project represents a top-level Arborinth entity, typically associated with
+a Git repository. It serves as the central entry point for Arborinth operations.
+
+### Workspace
+
+A workspace is an isolated environment derived from a project's Git repository.
+Each workspace contains its own clone of the repository (in the `workdir`
+subdirectory) where untrusted code can perform operations without affecting the
+original repository or other workspaces.
 
 ## Usage
 
-### Project Command
+### project command
 
 The `project` subcommand provides operations for managing Arborinth projects.
 
@@ -78,9 +94,30 @@ arborinth project info
 arborinth project info --workdir /path/to/dir
 ```
 
-### Project Module (Python API)
+### workspace command
 
-The `Project` class can be used programmatically:
+The `workspace` subcommand provides operations for managing isolated workspaces.
+
+```bash
+# Create a new workspace (clones the repository)
+arborinth workspace create my_workspace
+
+# Create a workspace in a specific project directory
+arborinth workspace create my_workspace --workdir /path/to/repo
+
+# List all workspaces for a project
+arborinth workspace list
+
+# Display information about a specific workspace
+arborinth workspace info my_workspace
+
+# Delete a workspace
+arborinth workspace delete my_workspace
+```
+
+### Python API
+
+Both `Project` and `Workspace` classes can be used programmatically:
 
 ```python
 from arborinth import Project
@@ -92,13 +129,26 @@ project = Project()
 root = project.repo_root_path
 print(f"Repository root: {root}")
 
-# Specify a different working directory
-project = Project(workdir="/path/to/dir")
-root = project.repo_root_path
+# Create a workspace
+workspace = project.create_workspace("my_workspace")
+
+# Access workspace paths
+print(f"Workspace root: {workspace.root_path}")
+print(f"Workspace workdir: {workspace.workdir_path}")
+
+# List existing workspaces
+workspaces = project.workspaces
+
+# Retrieve a specific workspace
+ws = project.workspace("my_workspace")
+
+# Delete a workspace
+ws.delete()
 ```
 
-The `Project` class validates that the working directory exists and is within
-a Git repository.
+The `Project` class validates that the working directory exists and is within a
+Git repository. Workspace names are validated to prevent path traversal attacks
+and other security issues.
 
 ## Development
 
