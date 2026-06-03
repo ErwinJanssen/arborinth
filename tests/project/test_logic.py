@@ -140,6 +140,22 @@ class TestCreateWorkspace:
             tmp_project.create_workspace("duplicate")
 
 
+class TestWorkspace:
+    """Tests for the `workspace` method."""
+
+    def test_workspace_retrieves_existing(self, tmp_project: logic.Project) -> None:
+        """`workspace` should retrieve an existing workspace."""
+        created_workspace = tmp_project.create_workspace("test_workspace")
+        retrieved_workspace = tmp_project.workspace(created_workspace.name)
+
+        assert retrieved_workspace == created_workspace
+
+    def test_workspace_nonexistent_raises(self, tmp_project: logic.Project) -> None:
+        """`workspace` should raise FileNotFoundError for non-existent workspace."""
+        with pytest.raises(FileNotFoundError, match="does not exist"):
+            tmp_project.workspace("nonexistent")
+
+
 class TestWorkspaces:
     """Tests for the `workspaces` property."""
 

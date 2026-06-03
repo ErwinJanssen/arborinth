@@ -32,6 +32,16 @@ class Workspace:
     name: str
     project: Project
 
+    def __post_init__(self) -> None:
+        """Validate the workspace after initialization.
+
+        Raises:
+            FileNotFoundError: If the workspace directory does not exist.
+        """
+        if not self.root_path.is_dir():
+            message = f"Workspace '{self.name}' does not exist at {self.root_path}"
+            raise FileNotFoundError(message)
+
     @property
     def root_path(self) -> pathlib.Path:
         """Path to this specific workspace directory.

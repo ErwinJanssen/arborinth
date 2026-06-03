@@ -66,3 +66,27 @@ def list_(workdir: pathlib.Path) -> None:
     except (ValueError, RuntimeError) as exc:
         message = f"Error: {exc}"
         raise click.ClickException(message) from exc
+
+
+@workspace.command()
+@click.argument("name")
+@click.option(
+    "--workdir",
+    "-C",
+    type=click.Path(file_okay=False, dir_okay=True, path_type=pathlib.Path),
+    default=".",
+    help="Working directory within the Git repository.",
+)
+def info(workdir: pathlib.Path, name: str) -> None:
+    """Display information about a workspace.
+
+    Shows the workspace name and its root path.
+    """
+    try:
+        project = Project(workdir=workdir)
+        workspace = project.workspace(name)
+        click.echo(f"Workspace: {workspace.name}")
+        click.echo(f"Path: {workspace.root_path}")
+    except (ValueError, RuntimeError, OSError) as exc:
+        message = f"Error: {exc}"
+        raise click.ClickException(message) from exc

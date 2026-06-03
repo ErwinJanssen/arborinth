@@ -134,3 +134,17 @@ class Project:
             ]
         except FileNotFoundError:
             return []
+
+    def workspace(self, name: str) -> Workspace:
+        """Retrieve a workspace by name.
+
+        Args:
+            name: The name of the workspace to retrieve.
+
+        Returns:
+            A `Workspace` instance for the specified workspace.
+
+        Raises:
+            FileNotFoundError: If no workspace with this name exists.
+        """
+        return Workspace(name=name, project=self)
