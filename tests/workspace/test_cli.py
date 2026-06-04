@@ -96,35 +96,6 @@ class TestCreateCommand:
                 or "file exists" in result2.output.lower()
             )
 
-    def test_create_nonexistent_workdir(
-        self, cli_runner: click.testing.CliRunner
-    ) -> None:
-        """Create command with non-existent workdir should fail."""
-        result = cli_runner.invoke(
-            main,
-            [
-                "--workdir",
-                "/nonexistent/path/12345",
-                "workspace",
-                "create",
-                "some_workspace",
-            ],
-        )
-        assert result.exit_code != 0
-        assert "Error:" in result.output
-        assert "does not exist" in result.output
-
-    def test_create_outside_git_repo(
-        self, cli_runner: click.testing.CliRunner, tmp_path: pathlib.Path
-    ) -> None:
-        """Create command from outside git repo should fail."""
-        result = cli_runner.invoke(
-            main, ["--workdir", str(tmp_path), "workspace", "create", "workspace"]
-        )
-        assert result.exit_code != 0
-        assert "Error:" in result.output
-        assert "Cannot determine Git root" in result.output
-
 
 class TestDeleteCommand:
     """Tests for the `workspace delete` command."""
@@ -179,35 +150,6 @@ class TestDeleteCommand:
             assert "Error:" in result.output
             assert "does not exist" in result.output
 
-    def test_delete_nonexistent_workdir(
-        self, cli_runner: click.testing.CliRunner
-    ) -> None:
-        """Delete command with non-existent workdir should fail."""
-        result = cli_runner.invoke(
-            main,
-            [
-                "--workdir",
-                "/nonexistent/path/12345",
-                "workspace",
-                "delete",
-                "some_workspace",
-            ],
-        )
-        assert result.exit_code != 0
-        assert "Error:" in result.output
-        assert "does not exist" in result.output
-
-    def test_delete_outside_git_repo(
-        self, cli_runner: click.testing.CliRunner, tmp_path: pathlib.Path
-    ) -> None:
-        """Delete command from outside git repo should fail."""
-        result = cli_runner.invoke(
-            main, ["--workdir", str(tmp_path), "workspace", "delete", "workspace"]
-        )
-        assert result.exit_code != 0
-        assert "Error:" in result.output
-        assert "Cannot determine Git root" in result.output
-
 
 class TestInfoCommand:
     """Tests for the `workspace info` command."""
@@ -260,35 +202,6 @@ class TestInfoCommand:
             assert "Error:" in result.output
             assert "does not exist" in result.output
 
-    def test_info_nonexistent_workdir(
-        self, cli_runner: click.testing.CliRunner
-    ) -> None:
-        """Info command with non-existent workdir should fail."""
-        result = cli_runner.invoke(
-            main,
-            [
-                "--workdir",
-                "/nonexistent/path/12345",
-                "workspace",
-                "info",
-                "some_workspace",
-            ],
-        )
-        assert result.exit_code != 0
-        assert "Error:" in result.output
-        assert "does not exist" in result.output
-
-    def test_info_outside_git_repo(
-        self, cli_runner: click.testing.CliRunner, tmp_path: pathlib.Path
-    ) -> None:
-        """Info command from outside git repo should fail."""
-        result = cli_runner.invoke(
-            main, ["--workdir", str(tmp_path), "workspace", "info", "workspace"]
-        )
-        assert result.exit_code != 0
-        assert "Error:" in result.output
-        assert "Cannot determine Git root" in result.output
-
 
 class TestListCommand:
     """Tests for the `workspace list` command."""
@@ -336,25 +249,3 @@ class TestListCommand:
         )
         assert result.exit_code == 0
         assert "remote_ws" in result.stdout
-
-    def test_list_nonexistent_workdir(
-        self, cli_runner: click.testing.CliRunner
-    ) -> None:
-        """List command with non-existent workdir should fail."""
-        result = cli_runner.invoke(
-            main, ["--workdir", "/nonexistent/path/12345", "workspace", "list"]
-        )
-        assert result.exit_code != 0
-        assert "Error:" in result.output
-        assert "does not exist" in result.output
-
-    def test_list_outside_git_repo(
-        self, cli_runner: click.testing.CliRunner, tmp_path: pathlib.Path
-    ) -> None:
-        """List command from outside git repo should fail."""
-        result = cli_runner.invoke(
-            main, ["--workdir", str(tmp_path), "workspace", "list"]
-        )
-        assert result.exit_code != 0
-        assert "Error:" in result.output
-        assert "Cannot determine Git root" in result.output

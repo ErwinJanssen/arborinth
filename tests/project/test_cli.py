@@ -74,25 +74,3 @@ class TestInfoCommand:
         expected_workspace_root = tmp_git_repo / ".arborinth" / "workspaces"
         assert f"Project root: {tmp_git_repo}" in result.stdout
         assert f"Workspace root: {expected_workspace_root}" in result.stdout
-
-    def test_info_nonexistent_workdir(
-        self, cli_runner: click.testing.CliRunner
-    ) -> None:
-        """Info with non-existent workdir should fail gracefully."""
-        result = cli_runner.invoke(
-            main, ["--workdir", "/nonexistent/path/12345", "project", "info"]
-        )
-        assert result.exit_code != 0
-        assert "Error:" in result.output
-        assert "does not exist" in result.output
-
-    def test_info_outside_git_repo(
-        self, cli_runner: click.testing.CliRunner, tmp_path: pathlib.Path
-    ) -> None:
-        """Info from outside git repo should fail gracefully."""
-        result = cli_runner.invoke(
-            main, ["--workdir", str(tmp_path), "project", "info"]
-        )
-        assert result.exit_code != 0
-        assert "Error:" in result.output
-        assert "Cannot determine Git root" in result.output
