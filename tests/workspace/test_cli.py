@@ -213,6 +213,7 @@ class TestInfoCommand:
             assert "Workspace: info_test" in result.stdout
             assert "Path:" in result.stdout
             assert ".arborinth/workspaces/info_test" in result.stdout
+            assert "Remote: arborinth/info_test" in result.stdout
 
     def test_info_explicit_workdir(
         self, cli_runner: click.testing.CliRunner, tmp_git_repo: pathlib.Path

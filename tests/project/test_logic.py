@@ -173,6 +173,26 @@ class TestCreateWorkspace:
         )
         assert proc.stdout.strip() == str(workspace.workdir_path)
 
+    def test_create_workspace_adds_remote_to_original_repo(
+        self, tmp_project: logic.Project
+    ) -> None:
+        """`create_workspace` should add workspace clone as remote in original repo."""
+        workspace = tmp_project.create_workspace("test_remote_workspace")
+
+        # Check that the remote was added to the original repository
+        remote_name = f"arborinth/{workspace.name}"
+        proc = subprocess.run(
+            ["git", "remote", "-v"],
+            cwd=tmp_project.repo_root_path,
+            capture_output=True,
+            check=True,
+            text=True,
+        )
+
+        # Check that the remote exists in the output
+        assert remote_name in proc.stdout
+        assert str(workspace.workdir_path) in proc.stdout
+
     def test_create_workspace_git_not_installed(
         self, monkeypatch: pytest.MonkeyPatch, tmp_project: logic.Project
     ) -> None:

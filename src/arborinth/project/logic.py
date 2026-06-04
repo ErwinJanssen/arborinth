@@ -112,6 +112,10 @@ class Project:
         an isolated Git configuration to prevent the host system's Git config
         from affecting the operation.
 
+        Also adds the workspace's clone as a remote in the original repository
+        with the name `arborinth/<workspace_name>`, allowing the original repo
+        to pull changes from the workspace.
+
         Args:
             name: The name of the workspace to create.
 
@@ -121,7 +125,8 @@ class Project:
         Raises:
             ValueError: If the workspace name is invalid.
             FileExistsError: If a workspace with this name already exists.
-            RuntimeError: If the Git repository cannot be cloned.
+            RuntimeError: If the Git repository cannot be cloned or if adding
+                the remote fails.
         """
         _util.validate_workspace_name(name)
 
@@ -185,7 +190,19 @@ class Project:
             )
             raise RuntimeError(message) from exc
 
-        return Workspace(name=name, project=self)
+        # Create the Workspace instance (directory exists, validation passes)
+        workspace = Workspace(name=name, project=self)
+
+        # Register the workspace as a remote in the original repository
+        try:
+            workspace.register_as_remote()
+        except RuntimeError:
+            # Clean up the workspace directory if adding remote failed
+            if workspace_path.exists():
+                shutil.rmtree(workspace_path)
+            raise
+
+        return workspace
 
     @property
     def workspaces(self) -> list[Workspace]:

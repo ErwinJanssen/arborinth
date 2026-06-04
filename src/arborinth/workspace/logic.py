@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import dataclasses
 import shutil
+import subprocess
 import typing
 
 from arborinth import _util
@@ -68,11 +69,86 @@ class Workspace:
         """
         return self.root_path / "workdir"
 
+    @property
+    def remote_name(self) -> str:
+        """Name of the remote in the original repository.
+
+        Returns:
+            The namespaced remote name: `arborinth/<workspace_name>`.
+        """
+        return f"arborinth/{self.name}"
+
+    def register_as_remote(self) -> None:
+        """Register this workspace as a remote in the original repository.
+
+        Adds a git remote named `arborinth/<workspace_name>` pointing to the
+        workspace's clone directory in the original repository.
+
+        Raises:
+            RuntimeError: If registering the remote fails.
+        """
+        try:
+            subprocess.run(
+                [
+                    "git",
+                    "remote",
+                    "add",
+                    self.remote_name,
+                    str(self.workdir_path),
+                ],
+                cwd=self.project.repo_root_path,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+        except subprocess.CalledProcessError as exc:
+            message = (
+                f"Failed to register remote '{self.remote_name}' in original repository: "  # noqa: E501
+                f"{exc.stderr.strip() if exc.stderr else 'unknown error'}"
+            )
+            raise RuntimeError(message) from exc
+        except FileNotFoundError as exc:
+            message = (
+                f"Cannot register remote '{self.remote_name}': "
+                f"Git is not installed or not found in PATH."
+            )
+            raise RuntimeError(message) from exc
+
+    def unregister_as_remote(self) -> None:
+        """Unregister this workspace's remote from the original repository.
+
+        Removes the git remote named `arborinth/<workspace_name>` from the
+        original repository.
+
+        Silently ignores errors if the remote doesn't exist or git is
+        unavailable.
+        """
+        try:
+            subprocess.run(
+                [
+                    "git",
+                    "remote",
+                    "remove",
+                    self.remote_name,
+                ],
+                cwd=self.project.repo_root_path,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+        except subprocess.CalledProcessError:
+            # Ignore errors if the remote doesn't exist
+            pass
+        except FileNotFoundError:
+            # Ignore if git is not available
+            pass
+
     def delete(self) -> None:
         """Delete this workspace.
 
-        Removes the workspace directory from the filesystem, including all
-        its contents.
+        Removes the workspace directory from the filesystem, including all its
+        contents. Also removes the corresponding remote from the original
+        repository if it exists.
 
         Raises:
             FileNotFoundError: If the workspace directory does not exist.
@@ -81,4 +157,7 @@ class Workspace:
         if not self.root_path.is_dir():
             message = f"Workspace '{self.name}' does not exist at {self.root_path}"
             raise FileNotFoundError(message)
+
+        self.unregister_as_remote()
+
         shutil.rmtree(self.root_path)

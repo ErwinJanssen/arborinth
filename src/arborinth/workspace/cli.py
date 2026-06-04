@@ -80,13 +80,15 @@ def list_(workdir: pathlib.Path) -> None:
 def info(workdir: pathlib.Path, name: str) -> None:
     """Display information about a workspace.
 
-    Shows the workspace name and its root path.
+    Shows the workspace name, its root path, and the remote name in the
+    original repository.
     """
     try:
         project = Project(workdir=workdir)
         workspace = project.workspace(name)
         click.echo(f"Workspace: {workspace.name}")
         click.echo(f"Path: {workspace.root_path}")
+        click.echo(f"Remote: {workspace.remote_name}")
     except (ValueError, RuntimeError, OSError) as exc:
         message = f"Error: {exc}"
         raise click.ClickException(message) from exc

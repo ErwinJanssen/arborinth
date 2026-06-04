@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import shutil
+import subprocess
 import typing
 
 import pytest
@@ -80,3 +81,31 @@ class TestWorkspaceDelete:
 
         with pytest.raises(FileNotFoundError, match="does not exist"):
             workspace.delete()
+
+    def test_delete_workspace_removes_remote(self, tmp_project: Project) -> None:
+        """`delete` should remove the corresponding remote from original repo."""
+        workspace = tmp_project.create_workspace("test_remote_remove")
+
+        # Verify the remote was added during creation
+        remote_name = f"arborinth/{workspace.name}"
+        proc = subprocess.run(
+            ["git", "remote", "-v"],
+            cwd=tmp_project.repo_root_path,
+            capture_output=True,
+            check=True,
+            text=True,
+        )
+        assert remote_name in proc.stdout
+
+        # Delete the workspace
+        workspace.delete()
+
+        # Verify the remote was removed
+        proc = subprocess.run(
+            ["git", "remote", "-v"],
+            cwd=tmp_project.repo_root_path,
+            capture_output=True,
+            check=True,
+            text=True,
+        )
+        assert remote_name not in proc.stdout
