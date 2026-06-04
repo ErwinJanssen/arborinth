@@ -3,11 +3,12 @@
 This module provides the command-line interface for workspace-related operations.
 """
 
-import pathlib
+import typing
 
 import click
 
-from arborinth import Project
+if typing.TYPE_CHECKING:
+    from arborinth import Project
 
 
 @click.group()
@@ -21,40 +22,28 @@ def workspace() -> None:
 
 @workspace.command()
 @click.argument("name")
-@click.option(
-    "--workdir",
-    "-C",
-    type=click.Path(file_okay=False, dir_okay=True, path_type=pathlib.Path),
-    default=".",
-    help="Working directory within the Git repository.",
-)
-def create(workdir: pathlib.Path, name: str) -> None:
+@click.pass_context
+def create(ctx: click.Context, name: str) -> None:
     """Create a new workspace.
 
     Creates a new workspace with the given name in the project's workspace root
     directory.
     """
     try:
-        project = Project(workdir=workdir)
+        project: Project = ctx.obj
         workspace = project.create_workspace(name)
         click.echo(f"Created workspace: {workspace.root_path}")
-    except (ValueError, RuntimeError, OSError) as exc:
+    except (RuntimeError, OSError) as exc:
         message = f"Error: {exc}"
         raise click.ClickException(message) from exc
 
 
 @workspace.command(name="list")
-@click.option(
-    "--workdir",
-    "-C",
-    type=click.Path(file_okay=False, dir_okay=True, path_type=pathlib.Path),
-    default=".",
-    help="Working directory within the Git repository.",
-)
-def list_(workdir: pathlib.Path) -> None:
+@click.pass_context
+def list_(ctx: click.Context) -> None:
     """List workspaces for the project."""
     try:
-        project = Project(workdir=workdir)
+        project: Project = ctx.obj
         workspaces = project.workspaces
 
         if not workspaces:
@@ -63,56 +52,44 @@ def list_(workdir: pathlib.Path) -> None:
 
         for ws in workspaces:
             click.echo(ws.name)
-    except (ValueError, RuntimeError) as exc:
+    except RuntimeError as exc:
         message = f"Error: {exc}"
         raise click.ClickException(message) from exc
 
 
 @workspace.command()
 @click.argument("name")
-@click.option(
-    "--workdir",
-    "-C",
-    type=click.Path(file_okay=False, dir_okay=True, path_type=pathlib.Path),
-    default=".",
-    help="Working directory within the Git repository.",
-)
-def info(workdir: pathlib.Path, name: str) -> None:
+@click.pass_context
+def info(ctx: click.Context, name: str) -> None:
     """Display information about a workspace.
 
     Shows the workspace name, its root path, and the remote name in the
     original repository.
     """
     try:
-        project = Project(workdir=workdir)
+        project: Project = ctx.obj
         workspace = project.workspace(name)
         click.echo(f"Workspace: {workspace.name}")
         click.echo(f"Path: {workspace.root_path}")
         click.echo(f"Remote: {workspace.remote_name}")
-    except (ValueError, RuntimeError, OSError) as exc:
+    except (RuntimeError, OSError) as exc:
         message = f"Error: {exc}"
         raise click.ClickException(message) from exc
 
 
 @workspace.command()
 @click.argument("name")
-@click.option(
-    "--workdir",
-    "-C",
-    type=click.Path(file_okay=False, dir_okay=True, path_type=pathlib.Path),
-    default=".",
-    help="Working directory within the Git repository.",
-)
-def delete(workdir: pathlib.Path, name: str) -> None:
+@click.pass_context
+def delete(ctx: click.Context, name: str) -> None:
     """Delete a workspace.
 
     Removes the workspace directory from the filesystem.
     """
     try:
-        project = Project(workdir=workdir)
+        project: Project = ctx.obj
         workspace = project.workspace(name)
         workspace.delete()
         click.echo(f"Deleted workspace: {name}")
-    except (ValueError, RuntimeError, OSError) as exc:
+    except (RuntimeError, OSError) as exc:
         message = f"Error: {exc}"
         raise click.ClickException(message) from exc
