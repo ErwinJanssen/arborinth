@@ -54,6 +54,7 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = [
     "S101",  # `assert` (tests should use assert statements)
+    "PLR2004",  # Magic values in test mocks are fine
 ]
 
 [tool.ruff.lint.pydocstyle]

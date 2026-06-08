@@ -234,8 +234,17 @@ class TestCreateWorkspace:
 
         def mock_run(cmd: list[str], *args: object, **kwargs: object) -> None:
             # Mock git remote add to fail
-            if cmd and cmd[0] == "git" and len(cmd) > 2 and cmd[2] == "add":
-                exc = subprocess.CalledProcessError(128, cmd, stderr="remote exists")
+            # cmd[0] = "git", cmd[1] = "remote", cmd[2] = "add"
+            if (
+                cmd
+                and len(cmd) > 2
+                and cmd[0] == "git"
+                and cmd[1] == "remote"
+                and cmd[2] == "add"
+            ):
+                exc = subprocess.CalledProcessError(
+                    128, cmd, stderr="remote exists"
+                )
                 raise exc
             return original_run(cmd, *args, **kwargs)
 

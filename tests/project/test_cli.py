@@ -79,7 +79,8 @@ class TestInfoCommand:
         self, cli_runner: click.testing.CliRunner, tmp_path: pathlib.Path
     ) -> None:
         """Info command should fail when not in a git repository."""
-        result = cli_runner.invoke(main, ["--workdir", str(tmp_path), "project", "info"])
+        workdir_arg = ["--workdir", str(tmp_path), "project", "info"]
+        result = cli_runner.invoke(main, workdir_arg)
         assert result.exit_code != 0
         assert "Error:" in result.output
         assert "Git" in result.output or "git" in result.output
