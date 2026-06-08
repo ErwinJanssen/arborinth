@@ -61,6 +61,37 @@ class TestWorkspacePaths:
         assert workspace.workdir_path == expected
 
 
+class TestInfo:
+    """Tests for the `info` property."""
+
+    def test_info_returns_dict(self, tmp_project: Project) -> None:
+        """`info` should return a dictionary."""
+        workspace = tmp_project.create_workspace("test")
+        info = workspace.info
+        assert isinstance(info, dict)
+
+    def test_info_contains_workspace_name(self, tmp_project: Project) -> None:
+        """`info` should contain workspace name."""
+        workspace = tmp_project.create_workspace("test_name")
+        info = workspace.info
+        assert "workspace_name" in info
+        assert info["workspace_name"] == "test_name"
+
+    def test_info_contains_path(self, tmp_project: Project) -> None:
+        """`info` should contain workspace path."""
+        workspace = tmp_project.create_workspace("test")
+        info = workspace.info
+        assert "path" in info
+        assert info["path"] == str(workspace.root_path)
+
+    def test_info_contains_remote(self, tmp_project: Project) -> None:
+        """`info` should contain remote name."""
+        workspace = tmp_project.create_workspace("test")
+        info = workspace.info
+        assert "remote" in info
+        assert info["remote"] == f"arborinth/{workspace.name}"
+
+
 class TestWorkspaceDelete:
     """Tests for the `delete` method."""
 

@@ -103,6 +103,18 @@ class Project:
         """
         return self.repo_root_path / ".arborinth" / "workspaces"
 
+    @property
+    def info(self) -> dict[str, str]:
+        """Project information as a dictionary.
+
+        Returns:
+            A dictionary containing project root path and workspace root path.
+        """
+        return {
+            "project_root": str(self.repo_root_path),
+            "workspace_root": str(self.workspace_root_path),
+        }
+
     def create_workspace(self, name: str) -> Workspace:
         """Create a new workspace.
 
