@@ -33,5 +33,5 @@ def info(ctx: click.Context) -> None:
         project: Project = ctx.obj
         click.echo(_util.format_info(project.info))
     except RuntimeError as exc:
-        message = f"Error: {exc}"
+        message = str(exc)
         raise click.ClickException(message) from exc
