@@ -46,14 +46,8 @@ def list_(ctx: click.Context) -> None:
     """List workspaces for the project."""
     try:
         project: Project = ctx.obj
-        workspaces = project.workspaces
-
-        if not workspaces:
-            message = "No workspaces found for this project."
-            raise click.ClickException(message)
-
-        for ws in workspaces:
-            click.echo(ws.name)
+        for workspace in project.workspaces:
+            click.echo(workspace.name)
     except RuntimeError as exc:
         message = f"Error: {exc}"
         raise click.ClickException(message) from exc

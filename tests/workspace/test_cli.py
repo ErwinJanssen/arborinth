@@ -254,8 +254,8 @@ class TestListCommand:
         """List command with no workspaces should show empty message."""
         with cli_runner.isolated_filesystem(temp_dir=tmp_git_repo):
             result = cli_runner.invoke(main, ["workspace", "list"])
-            assert result.exit_code != 0
-            assert "No workspaces found" in result.stderr
+            assert result.exit_code == 0
+            assert not result.output
 
     def test_list_workspaces(
         self, cli_runner: click.testing.CliRunner, tmp_git_repo: pathlib.Path
