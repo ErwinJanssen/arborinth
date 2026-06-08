@@ -226,6 +226,28 @@ class TestCreateWorkspace:
         assert remote_name in proc.stdout
         assert str(workspace.workdir_path) in proc.stdout
 
+    def test_create_workspace_remote_registration_fails(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_project: logic.Project
+    ) -> None:
+        """`create_workspace` should clean up if remote registration fails."""
+        original_run = subprocess.run
+
+        def mock_run(cmd: list[str], *args: object, **kwargs: object) -> None:
+            # Mock git remote add to fail
+            if cmd and cmd[0] == "git" and len(cmd) > 2 and cmd[2] == "add":
+                exc = subprocess.CalledProcessError(128, cmd, stderr="remote exists")
+                raise exc
+            return original_run(cmd, *args, **kwargs)
+
+        monkeypatch.setattr(subprocess, "run", mock_run)
+
+        with pytest.raises(RuntimeError):
+            tmp_project.create_workspace("test_remote_fail")
+
+        # Verify cleanup happened - workspace dir should not exist
+        workspace_path = tmp_project.workspace_root_path / "test_remote_fail"
+        assert not workspace_path.exists()
+
     def test_create_workspace_git_not_installed(
         self, monkeypatch: pytest.MonkeyPatch, tmp_project: logic.Project
     ) -> None:
