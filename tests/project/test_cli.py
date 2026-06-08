@@ -48,8 +48,8 @@ class TestInfoCommand:
             assert result.exit_code == 0
 
             expected_workspace_root = tmp_git_repo / ".arborinth" / "workspaces"
-            assert f"Project root: {tmp_git_repo}" in result.stdout
-            assert f"Workspace root: {expected_workspace_root}" in result.stdout
+            assert f"project root: {tmp_git_repo}" in result.stdout
+            assert f"workspace root: {expected_workspace_root}" in result.stdout
 
     def test_info_explicit_workdir(
         self, cli_runner: click.testing.CliRunner, tmp_git_repo: pathlib.Path
@@ -61,8 +61,8 @@ class TestInfoCommand:
         assert result.exit_code == 0
 
         expected_workspace_root = tmp_git_repo / ".arborinth" / "workspaces"
-        assert f"Project root: {tmp_git_repo}" in result.stdout
-        assert f"Workspace root: {expected_workspace_root}" in result.stdout
+        assert f"project root: {tmp_git_repo}" in result.stdout
+        assert f"workspace root: {expected_workspace_root}" in result.stdout
 
     def test_info_short_workdir_flag(
         self, cli_runner: click.testing.CliRunner, tmp_git_repo: pathlib.Path
@@ -72,5 +72,5 @@ class TestInfoCommand:
         assert result.exit_code == 0
 
         expected_workspace_root = tmp_git_repo / ".arborinth" / "workspaces"
-        assert f"Project root: {tmp_git_repo}" in result.stdout
-        assert f"Workspace root: {expected_workspace_root}" in result.stdout
+        assert f"project root: {tmp_git_repo}" in result.stdout
+        assert f"workspace root: {expected_workspace_root}" in result.stdout

@@ -78,6 +78,19 @@ class Workspace:
         """
         return f"arborinth/{self.name}"
 
+    @property
+    def info(self) -> dict[str, str]:
+        """Workspace information as a dictionary.
+
+        Returns:
+            A dictionary containing workspace name, path, and remote name.
+        """
+        return {
+            "workspace_name": self.name,
+            "path": str(self.root_path),
+            "remote": self.remote_name,
+        }
+
     def register_as_remote(self) -> None:
         """Register this workspace as a remote in the original repository.
 

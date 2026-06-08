@@ -118,6 +118,27 @@ class TestWorkspaceRootPath:
         assert tmp_project.workspace_root_path == expected
 
 
+class TestInfo:
+    """Tests for the `info` property."""
+
+    def test_info_returns_dict(self, tmp_project: logic.Project) -> None:
+        """`info` should return a dictionary."""
+        info = tmp_project.info
+        assert isinstance(info, dict)
+
+    def test_info_contains_project_root(self, tmp_project: logic.Project) -> None:
+        """`info` should contain project root path."""
+        info = tmp_project.info
+        assert "project_root" in info
+        assert str(tmp_project.repo_root_path) == info["project_root"]
+
+    def test_info_contains_workspace_root(self, tmp_project: logic.Project) -> None:
+        """`info` should contain workspace root path."""
+        info = tmp_project.info
+        assert "workspace_root" in info
+        assert str(tmp_project.workspace_root_path) == info["workspace_root"]
+
+
 class TestCreateWorkspace:
     """Tests for the `create_workspace` method."""
 

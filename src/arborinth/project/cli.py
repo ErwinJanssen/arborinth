@@ -7,6 +7,8 @@ import typing
 
 import click
 
+from arborinth import _util
+
 if typing.TYPE_CHECKING:
     from arborinth import Project
 
@@ -29,8 +31,7 @@ def info(ctx: click.Context) -> None:
     """
     try:
         project: Project = ctx.obj
-        click.echo(f"Project root: {project.repo_root_path}")
-        click.echo(f"Workspace root: {project.workspace_root_path}")
+        click.echo(_util.format_info(project.info))
     except RuntimeError as exc:
         message = f"Error: {exc}"
         raise click.ClickException(message) from exc

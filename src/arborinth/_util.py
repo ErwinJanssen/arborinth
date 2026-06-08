@@ -8,6 +8,21 @@ from __future__ import annotations
 import string
 
 
+def format_info(info: dict[str, str]) -> str:
+    """Format a dictionary of object information into a string.
+
+    This function is used to format the output of the `info` command for e.g.
+    `arborinth project info` or `arborinth workspace info`.
+
+    Args:
+        info: A dictionary of information to format.
+
+    Returns:
+        A string representation of the information.
+    """
+    return "\n".join(f"{key.replace('_', ' ')}: {value}" for key, value in info.items())
+
+
 def validate_workspace_name(name: str) -> None:
     r"""Validate a workspace name.
 

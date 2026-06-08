@@ -171,10 +171,9 @@ class TestInfoCommand:
 
             result = cli_runner.invoke(main, ["workspace", "info", "info_test"])
             assert result.exit_code == 0
-            assert "Workspace: info_test" in result.stdout
-            assert "Path:" in result.stdout
-            assert ".arborinth/workspaces/info_test" in result.stdout
-            assert "Remote: arborinth/info_test" in result.stdout
+            assert "workspace name: info_test" in result.stdout
+            assert "path: .arborinth/workspaces/info_test" in result.stdout
+            assert "remote: arborinth/info_test" in result.stdout
 
     def test_info_explicit_workdir(
         self, cli_runner: click.testing.CliRunner, tmp_git_repo: pathlib.Path
@@ -189,8 +188,8 @@ class TestInfoCommand:
             main, ["--workdir", str(tmp_git_repo), "workspace", "info", "remote_info"]
         )
         assert result.exit_code == 0
-        assert "Workspace: remote_info" in result.stdout
-        assert "Path:" in result.stdout
+        assert "workspace name: remote_info" in result.stdout
+        assert "path:" in result.stdout
 
     def test_info_nonexistent_workspace(
         self, cli_runner: click.testing.CliRunner, tmp_git_repo: pathlib.Path
