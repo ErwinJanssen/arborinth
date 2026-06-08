@@ -154,6 +154,14 @@ class TestWorkspaceDelete:
         with pytest.raises(FileNotFoundError, match="does not exist"):
             workspace.delete()
 
+    def test_delete_twice_raises(self, tmp_project: Project) -> None:
+        """`delete` called twice should raise FileNotFoundError."""
+        workspace = tmp_project.create_workspace("to_delete_twice")
+        workspace.delete()
+
+        with pytest.raises(FileNotFoundError, match="does not exist"):
+            workspace.delete()
+
     def test_delete_workspace_removes_remote(self, tmp_project: Project) -> None:
         """`delete` should remove the corresponding remote from original repo."""
         workspace = tmp_project.create_workspace("test_remote_remove")
