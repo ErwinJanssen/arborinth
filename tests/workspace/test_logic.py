@@ -92,6 +92,39 @@ class TestInfo:
         assert info["remote"] == f"arborinth/{workspace.name}"
 
 
+class TestRegisterAsRemote:
+    """Tests for the `register_as_remote` method."""
+
+    def test_register_adds_remote(self, tmp_project: Project) -> None:
+        """`register_as_remote` should add remote to original repo."""
+        workspace = tmp_project.create_workspace("test_register")
+
+        # Verify the remote exists
+        proc = subprocess.run(
+            ["git", "remote", "-v"],
+            cwd=tmp_project.repo_root_path,
+            capture_output=True,
+            check=True,
+            text=True,
+        )
+        assert f"arborinth/{workspace.name}" in proc.stdout
+
+    def test_register_git_not_installed(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_project: Project
+    ) -> None:
+        """`register_as_remote` should raise RuntimeError when git is not installed."""
+        workspace = tmp_project.create_workspace("test_register_no_git")
+
+        def mock_run(*_args: object, **_kwargs: object) -> None:
+            message = "git not found"
+            raise FileNotFoundError(message)
+
+        monkeypatch.setattr(subprocess, "run", mock_run)
+
+        with pytest.raises(RuntimeError, match="Git is not installed"):
+            workspace.register_as_remote()
+
+
 class TestUnregisterAsRemote:
     """Tests for the `unregister_as_remote` method."""
 
