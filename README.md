@@ -150,6 +150,21 @@ The `Project` class validates that the working directory exists and is within a
 Git repository. Workspace names are validated to prevent path traversal attacks
 and other security issues.
 
+## Installation
+
+```bash
+pip install arborinth
+```
+
 ## Development
 
 Contributions, ideas and feedback are welcome!
+
+To set up a development environment:
+
+```bash
+git clone https://github.com/your-repo/arborinth.git
+cd arborinth
+pip install -e ".[dev]"
+pytest
+```
