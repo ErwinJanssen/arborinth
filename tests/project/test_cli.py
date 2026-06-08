@@ -74,3 +74,12 @@ class TestInfoCommand:
         expected_workspace_root = tmp_git_repo / ".arborinth" / "workspaces"
         assert f"project root: {tmp_git_repo}" in result.stdout
         assert f"workspace root: {expected_workspace_root}" in result.stdout
+
+    def test_info_outside_git_repo_fails(
+        self, cli_runner: click.testing.CliRunner, tmp_path: pathlib.Path
+    ) -> None:
+        """Info command should fail when not in a git repository."""
+        result = cli_runner.invoke(main, ["--workdir", str(tmp_path), "project", "info"])
+        assert result.exit_code != 0
+        assert "Error:" in result.output
+        assert "Git" in result.output or "git" in result.output
