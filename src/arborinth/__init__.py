@@ -1,5 +1,6 @@
 """Arborinth - Safely run untrusted code in isolated environments."""
-# ruff: noqa: F401 (unused-import)
 
-from .project import Project
-from .workspace import Workspace
+from .project.logic import Project
+from .workspace.logic import Workspace
+
+__all__ = ["Project", "Workspace"]
