@@ -23,15 +23,16 @@ def project() -> None:
 
 
 @project.command()
+@_util.click_format_option
 @click.pass_context
-def info(ctx: click.Context) -> None:
+def info(ctx: click.Context, output_format: _util.InfoFormat) -> None:
     """Display information about the current project.
 
     Shows the Git repository root path and workspace root path for the project.
     """
     try:
         project: Project = ctx.obj
-        click.echo(_util.format_info(project.info))
+        click.echo(_util.format_info(project.info, output_format))
     except RuntimeError as exc:
         message = f"Error: {exc}"
         raise click.ClickException(message) from exc

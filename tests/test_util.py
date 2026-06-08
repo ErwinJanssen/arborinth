@@ -1,6 +1,22 @@
 """Tests for the Arborinth utility functions."""
 
+import json
+
+import pytest
+
 from arborinth import _util
+
+
+class TestInfoFormat:
+    """Tests for the InfoFormat enum."""
+
+    def test_info_format_text_value(self) -> None:
+        """InfoFormat.TEXT should have value 'text'."""
+        assert _util.InfoFormat.TEXT.value == "text"
+
+    def test_info_format_json_value(self) -> None:
+        """InfoFormat.JSON should have value 'json'."""
+        assert _util.InfoFormat.JSON.value == "json"
 
 
 class TestFormatInfo:
@@ -37,3 +53,33 @@ class TestFormatInfo:
         result = _util.format_info({"first": "1", "second": "2", "third": "3"})
         lines = result.split("\n")
         assert lines == ["first: 1", "second: 2", "third: 3"]
+
+    def test_format_info_json_format(self) -> None:
+        """format_info with JSON format should return JSON string."""
+        info = {"key": "value", "another_key": "another_value"}
+        result = _util.format_info(info, _util.InfoFormat.JSON)
+        parsed = json.loads(result)
+        assert parsed == info
+
+    def test_format_info_json_empty_dict(self) -> None:
+        """format_info with JSON format and empty dict should return '{}'."""
+        result = _util.format_info({}, _util.InfoFormat.JSON)
+        assert result == "{}"
+
+    def test_format_info_json_with_underscores(self) -> None:
+        """format_info with JSON format should preserve underscore keys."""
+        info = {"my_key": "value"}
+        result = _util.format_info(info, _util.InfoFormat.JSON)
+        parsed = json.loads(result)
+        assert parsed == {"my_key": "value"}
+
+    def test_format_info_unknown_format_raises(self) -> None:
+        """format_info with unknown format should raise ValueError."""
+
+        # Create a mock enum value that's not TEXT or JSON
+        class MockFormat:
+            pass
+
+        mock_format = MockFormat()
+        with pytest.raises(ValueError, match="Unknown format"):
+            _util.format_info({"key": "value"}, mock_format)

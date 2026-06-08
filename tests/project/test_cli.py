@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import typing
 
 from arborinth.cli import main
@@ -74,3 +75,27 @@ class TestInfoCommand:
         expected_workspace_root = tmp_git_repo / ".arborinth" / "workspaces"
         assert f"project root: {tmp_git_repo}" in result.stdout
         assert f"workspace root: {expected_workspace_root}" in result.stdout
+
+    def test_info_json_format(
+        self, cli_runner: click.testing.CliRunner, tmp_git_repo: pathlib.Path
+    ) -> None:
+        """Info with --format json should output JSON."""
+        with cli_runner.isolated_filesystem(temp_dir=tmp_git_repo):
+            result = cli_runner.invoke(main, ["project", "info", "--format", "json"])
+            assert result.exit_code == 0
+
+            parsed = json.loads(result.stdout)
+            assert "project_root" in parsed
+            assert "workspace_root" in parsed
+            assert parsed["project_root"] == str(tmp_git_repo)
+
+    def test_info_json_format_short_flag(
+        self, cli_runner: click.testing.CliRunner, tmp_git_repo: pathlib.Path
+    ) -> None:
+        """Info with -f json should output JSON."""
+        with cli_runner.isolated_filesystem(temp_dir=tmp_git_repo):
+            result = cli_runner.invoke(main, ["project", "info", "-f", "json"])
+            assert result.exit_code == 0
+
+            parsed = json.loads(result.stdout)
+            assert "project_root" in parsed

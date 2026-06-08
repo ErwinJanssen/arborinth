@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import typing
 
 from arborinth.cli import main
@@ -201,6 +202,41 @@ class TestInfoCommand:
             assert result.exit_code != 0
             assert "Error:" in result.output
             assert "does not exist" in result.output
+
+    def test_info_json_format(
+        self, cli_runner: click.testing.CliRunner, tmp_git_repo: pathlib.Path
+    ) -> None:
+        """Info with --format json should output JSON."""
+        with cli_runner.isolated_filesystem(temp_dir=tmp_git_repo):
+            # Create a workspace first
+            cli_runner.invoke(main, ["workspace", "create", "json_test"])
+
+            result = cli_runner.invoke(
+                main, ["workspace", "info", "json_test", "--format", "json"]
+            )
+            assert result.exit_code == 0
+
+            parsed = json.loads(result.stdout)
+            assert "workspace_name" in parsed
+            assert "path" in parsed
+            assert "remote" in parsed
+            assert parsed["workspace_name"] == "json_test"
+
+    def test_info_json_format_short_flag(
+        self, cli_runner: click.testing.CliRunner, tmp_git_repo: pathlib.Path
+    ) -> None:
+        """Info with -f json should output JSON."""
+        with cli_runner.isolated_filesystem(temp_dir=tmp_git_repo):
+            # Create a workspace first
+            cli_runner.invoke(main, ["workspace", "create", "json_test2"])
+
+            result = cli_runner.invoke(
+                main, ["workspace", "info", "json_test2", "-f", "json"]
+            )
+            assert result.exit_code == 0
+
+            parsed = json.loads(result.stdout)
+            assert "workspace_name" in parsed
 
 
 class TestListCommand:

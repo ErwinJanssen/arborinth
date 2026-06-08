@@ -61,8 +61,9 @@ def list_(ctx: click.Context) -> None:
 
 @workspace.command()
 @click.argument("name")
+@_util.click_format_option
 @click.pass_context
-def info(ctx: click.Context, name: str) -> None:
+def info(ctx: click.Context, name: str, output_format: _util.InfoFormat) -> None:
     """Display information about a workspace.
 
     Shows the workspace name, its root path, and the remote name in the
@@ -71,7 +72,7 @@ def info(ctx: click.Context, name: str) -> None:
     try:
         project: Project = ctx.obj
         workspace = project.workspace(name)
-        click.echo(_util.format_info(workspace.info))
+        click.echo(_util.format_info(workspace.info, output_format))
     except (RuntimeError, OSError) as exc:
         message = f"Error: {exc}"
         raise click.ClickException(message) from exc
