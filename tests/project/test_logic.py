@@ -161,6 +161,18 @@ class TestCreateWorkspace:
         with pytest.raises(FileExistsError):
             tmp_project.create_workspace("duplicate")
 
+    def test_create_workspace_existing_directory_raises(
+        self, tmp_project: logic.Project
+    ) -> None:
+        """`create_workspace` should raise `FileExistsError` if directory exists."""
+        # Create a directory in the workspace root
+        workspace_root = tmp_project.workspace_root_path
+        workspace_root.mkdir(parents=True, exist_ok=True)
+        (workspace_root / "existing").mkdir()
+
+        with pytest.raises(FileExistsError, match="already exists"):
+            tmp_project.create_workspace("existing")
+
     @pytest.mark.parametrize(**INVALID_WORKSPACE_NAME_INPUTS)
     def test_invalid_name_raises(
         self,
