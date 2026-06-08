@@ -1,5 +1,17 @@
 """Test suite for Arborinth."""
 
+# Valid workspace names for positive testing
+VALID_WORKSPACE_NAMES = [
+    "simple",
+    "with_numbers_123",
+    "with-dashes",
+    "with_underscores",
+    "UPPERCASE",
+    "MixedCase",
+    "a",
+    "very_long_workspace_name_that_is_still_valid",
+]
+
 INVALID_WORKSPACE_NAME_INPUTS = {
     "argnames": ("name", "exception_type", "message_substring"),
     "argvalues": [
