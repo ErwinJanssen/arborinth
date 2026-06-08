@@ -92,6 +92,47 @@ class TestInfo:
         assert info["remote"] == f"arborinth/{workspace.name}"
 
 
+class TestUnregisterAsRemote:
+    """Tests for the `unregister_as_remote` method."""
+
+    def test_unregister_removes_remote(self, tmp_project: Project) -> None:
+        """`unregister_as_remote` should remove the remote from original repo."""
+        workspace = tmp_project.create_workspace("test_unregister")
+
+        # Verify the remote exists
+        proc = subprocess.run(
+            ["git", "remote", "-v"],
+            cwd=tmp_project.repo_root_path,
+            capture_output=True,
+            check=True,
+            text=True,
+        )
+        assert f"arborinth/{workspace.name}" in proc.stdout
+
+        # Unregister the remote
+        workspace.unregister_as_remote()
+
+        # Verify the remote was removed
+        proc = subprocess.run(
+            ["git", "remote", "-v"],
+            cwd=tmp_project.repo_root_path,
+            capture_output=True,
+            check=True,
+            text=True,
+        )
+        assert f"arborinth/{workspace.name}" not in proc.stdout
+
+    def test_unregister_nonexistent_remote_silently_ignores(
+        self, tmp_project: Project
+    ) -> None:
+        """`unregister_as_remote` should silently ignore non-existent remote."""
+        workspace = tmp_project.create_workspace("test_nonexistent")
+        workspace.unregister_as_remote()
+
+        # Call again - should not raise
+        workspace.unregister_as_remote()
+
+
 class TestWorkspaceDelete:
     """Tests for the `delete` method."""
 
