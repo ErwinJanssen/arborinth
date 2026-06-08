@@ -26,3 +26,10 @@ repos:
 
           # Format Python code blocks with Ruff.
           - mdformat-ruff
+
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.11.2
+    hooks:
+      - id: mypy
+        additional_dependencies:
+          - types-click
