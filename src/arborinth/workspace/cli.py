@@ -36,7 +36,7 @@ def create(ctx: click.Context, name: str) -> None:
         workspace = project.create_workspace(name)
         click.echo(f"Created workspace: {workspace.root_path}")
     except (RuntimeError, OSError) as exc:
-        message = f"Error: {exc}"
+        message = str(exc)
         raise click.ClickException(message) from exc
 
 
@@ -49,7 +49,7 @@ def list_(ctx: click.Context) -> None:
         for workspace in project.workspaces:
             click.echo(workspace.name)
     except RuntimeError as exc:
-        message = f"Error: {exc}"
+        message = str(exc)
         raise click.ClickException(message) from exc
 
 
@@ -68,7 +68,7 @@ def info(ctx: click.Context, name: str, output_format: _util.InfoFormat) -> None
         workspace = project.workspace(name)
         click.echo(_util.format_info(workspace.info, output_format))
     except (RuntimeError, OSError) as exc:
-        message = f"Error: {exc}"
+        message = str(exc)
         raise click.ClickException(message) from exc
 
 
@@ -86,5 +86,5 @@ def delete(ctx: click.Context, name: str) -> None:
         workspace.delete()
         click.echo(f"Deleted workspace: {name}")
     except (RuntimeError, OSError) as exc:
-        message = f"Error: {exc}"
+        message = str(exc)
         raise click.ClickException(message) from exc
