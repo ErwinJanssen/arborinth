@@ -218,15 +218,23 @@ class TestCreateWorkspace:
         self, monkeypatch: pytest.MonkeyPatch, tmp_project: logic.Project
     ) -> None:
         """`create_workspace` should raise RuntimeError when git is not installed."""
+        original_run = subprocess.run
 
-        def mock_run(*_args: object, **_kwargs: object) -> None:
-            message = "git not found"
-            raise FileNotFoundError(message)
+        def mock_run(cmd: list[str], *args: object, **kwargs: object) -> None:
+            # Only mock the git clone command, let repo_root_path work
+            if cmd and cmd[0] == "git" and len(cmd) > 1 and cmd[1] == "clone":
+                message = "git not found"
+                raise FileNotFoundError(message)
+            return original_run(cmd, *args, **kwargs)
 
         monkeypatch.setattr(subprocess, "run", mock_run)
 
         with pytest.raises(RuntimeError, match="Git is not installed"):
             tmp_project.create_workspace("test_no_git")
+
+        # Verify cleanup happened - workspace dir should not exist
+        workspace_path = tmp_project.workspace_root_path / "test_no_git"
+        assert not workspace_path.exists()
 
     def test_create_workspace_clone_failure(
         self, monkeypatch: pytest.MonkeyPatch, tmp_project: logic.Project
