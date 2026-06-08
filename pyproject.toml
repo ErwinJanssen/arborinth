@@ -1,7 +1,7 @@
 [project]
 name = "arborinth"
 version = "0.1.0"
-description = "Add your description here"
+description = "Safely run untrusted code on your repository in isolated, controlled environments"
 readme = "README.md"
 authors = [
     { name = "Erwin Janssen", email = "code@erwinjanssen.nl" }
