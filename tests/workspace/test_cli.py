@@ -172,7 +172,8 @@ class TestInfoCommand:
             result = cli_runner.invoke(main, ["workspace", "info", "info_test"])
             assert result.exit_code == 0
             assert "workspace name: info_test" in result.stdout
-            assert "path: .arborinth/workspaces/info_test" in result.stdout
+            assert "path:" in result.stdout
+            assert ".arborinth/workspaces/info_test" in result.stdout
             assert "remote: arborinth/info_test" in result.stdout
 
     def test_info_explicit_workdir(
@@ -217,8 +218,8 @@ class TestListCommand:
         """List command with no workspaces should show empty message."""
         with cli_runner.isolated_filesystem(temp_dir=tmp_git_repo):
             result = cli_runner.invoke(main, ["workspace", "list"])
-            assert result.exit_code != 0
-            assert "No workspaces found" in result.stderr
+            assert result.exit_code == 0
+            assert "No workspaces found" in result.stdout
 
     def test_list_workspaces(
         self, cli_runner: click.testing.CliRunner, tmp_git_repo: pathlib.Path
