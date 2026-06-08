@@ -22,7 +22,7 @@ agents, the scope is intentionally broader than just AI-specific tooling.
 
 Arborinth aims to provide:
 
-- Reproducable and isolated execution environments for untrusted workloads.
+- Reproducible and isolated execution environments for untrusted workloads.
 - Controlled access to repository state.
 - Writable derived workspaces without mutating the original checkout.
 - Auditability of changes and execution.
@@ -37,7 +37,7 @@ virtual machines.
 
 Allow an AI agent to inspect a repository, modify files, run tests, execute
 linters and create commits. All in its own isolated environment, without
-directly affecting the original respository or the host environment.
+directly affecting the original repository or the host environment.
 
 ### Parallel Execution
 
