@@ -168,3 +168,5 @@ cd arborinth
 pip install -e ".[dev]"
 pytest
 ```
+
+The project uses pytest with coverage. Run `make test-cov` to see test coverage.

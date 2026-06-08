@@ -1,14 +1,16 @@
-.PHONY: help install test lint format clean
+.PHONY: help install test lint format clean coverage
 
 help:
 	@echo "Arborinth Development Targets"
 	@echo "==========================="
 	@echo ""
-	@echo "install - Install the package in development mode"
-	@echo "test    - Run all tests"
-	@echo "lint    - Run linting checks"
-	@echo "format  - Format code"
-	@echo "clean   - Remove build and test artifacts"
+	@echo "install   - Install the package in development mode"
+	@echo "test      - Run all tests"
+	@echo "test-cov  - Run tests with coverage"
+	@echo "lint      - Run linting checks"
+	@echo "format    - Format code"
+	@echo "clean     - Remove build and test artifacts"
+	@echo "coverage  - Show coverage report"
 	@echo ""
 
 install:
@@ -17,6 +19,9 @@ install:
 test:
 	pytest -v
 
+test-cov:
+	pytest --cov=src/arborinth --cov-report=term-missing -v
+
 lint:
 	ruff check src/ tests/
 	mypy src/
@@ -24,6 +29,9 @@ lint:
 format:
 	ruff check --fix src/ tests/
 	ruff format src/ tests/
+
+coverage:
+	pytest --cov=src/arborinth --cov-report=term-missing --cov-report=html -v
 
 clean:
 	find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true

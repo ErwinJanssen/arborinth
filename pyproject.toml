@@ -19,6 +19,7 @@ build-backend = "uv_build"
 [dependency-groups]
 dev = [
     "pytest>=9.0.3",
+    "pytest-cov>=4.1.0",
 ]
 
 [tool.mdformat]
@@ -69,3 +70,19 @@ strict = true
 [[tool.mypy.overrides]]
 module = "tests.*"
 ignore_missing_imports = true
+
+[tool.coverage.run]
+source = ["src/arborinth"]
+branch = true
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+]
+fail_under = 90
+
+[tool.coverage.html]
+directory = "htmlcov"

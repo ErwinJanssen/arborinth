@@ -18,8 +18,17 @@ Thank you for your interest in contributing to Arborinth! All contributions are 
 ## Running Tests
 
 ```bash
+# Run tests
 pytest -v
+
+# Run tests with coverage
+make test-cov
+
+# Generate HTML coverage report
+make coverage
 ```
+
+The project aims for **>90% test coverage**.
 
 ## Code Style
 
