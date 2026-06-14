@@ -6,6 +6,7 @@ import click
 
 from arborinth import Project
 from arborinth.project.cli import project
+from arborinth.shell.cli import shell
 from arborinth.workspace.cli import workspace
 
 
@@ -30,4 +31,5 @@ def main(ctx: click.Context, workdir: pathlib.Path) -> None:
 
 
 main.add_command(project)
+main.add_command(shell)
 main.add_command(workspace)
