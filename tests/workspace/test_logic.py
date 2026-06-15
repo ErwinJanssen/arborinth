@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import typing
@@ -9,10 +10,10 @@ import typing
 import pytest
 
 from arborinth.workspace import logic
-from tests import INVALID_WORKSPACE_NAME_INPUTS
+from tests import INVALID_WORKSPACE_NAME_INPUTS, generate_random_string
 
 if typing.TYPE_CHECKING:
-    from arborinth import Project
+    from arborinth import Project, Workspace
 
 
 class TestWorkspaceInit:
@@ -140,3 +141,45 @@ class TestWorkspaceDelete:
             text=True,
         )
         assert remote_name not in proc.stdout
+
+
+class TestWorkspaceShell:
+    """Tests for the `shell` method."""
+
+    def test_shell_with_command(self, tmp_workspace: Workspace) -> None:
+        """`shell` should execute a command in the workspace workdir."""
+        # Run a simple command that should succeed
+        args = ["git", "status"]
+        proc = tmp_workspace.shell(args=args)
+
+        assert isinstance(proc, subprocess.CompletedProcess)
+        assert proc.args == args
+        assert proc.returncode == 0
+
+    def test_shell_with_no_args_uses_default_shell(
+        self, tmp_workspace: Workspace
+    ) -> None:
+        """`shell` with no args should use default shell."""
+        # Get default shell from env, with fallbacks matching the implementation
+        shell = os.environ.get("SHELL")
+        if not shell or shutil.which(shell) is None:
+            shell = shutil.which("bash") or shutil.which("sh")
+
+        # When no args are provided, it should use the default shell
+        proc = tmp_workspace.shell(args=None)
+        assert proc.args == [shell]
+
+    def test_shell_runs_in_workdir(self, tmp_workspace: Workspace) -> None:
+        """`shell` should run command in the workspace's workdir."""
+        # Verify that `shell` method uses correct `cwd` by creating a file and
+        # checking it exists in the workdir.
+        reference_file = generate_random_string()
+
+        proc = tmp_workspace.shell(args=["touch", reference_file])
+        assert proc.returncode == 0
+        assert (tmp_workspace.workdir_path / reference_file).exists()
+
+    def test_shell_with_invalid_command_raises(self, tmp_workspace: Workspace) -> None:
+        """`shell` with invalid command should raise `FileNotFoundError`."""
+        with pytest.raises(FileNotFoundError, match="No such file"):
+            tmp_workspace.shell(args=["nonexistent_command_xyz"])

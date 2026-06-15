@@ -1,5 +1,8 @@
 """Test suite for Arborinth."""
 
+import random
+import string
+
 INVALID_WORKSPACE_NAME_INPUTS = {
     "argnames": ("name", "exception_type", "message_substring"),
     "argvalues": [
@@ -22,3 +25,8 @@ INVALID_WORKSPACE_NAME_INPUTS = {
         ("test\rname", ValueError, "whitespace"),
     ],
 }
+
+
+def generate_random_string(length: int = 10) -> str:
+    """Generate a random string of letters of the given length."""
+    return "".join(random.choice(string.ascii_letters) for _ in range(length))  # noqa: S311

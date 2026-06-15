@@ -9,6 +9,7 @@ repository.
 from __future__ import annotations
 
 import dataclasses
+import os
 import shutil
 import subprocess
 import typing
@@ -174,3 +175,59 @@ class Workspace:
         self.unregister_as_remote()
 
         shutil.rmtree(self.root_path)
+
+    def shell(
+        self, args: typing.Sequence[str] | None = None
+    ) -> subprocess.CompletedProcess:
+        """Run a shell or command in this workspace.
+
+        Opens a shell session in the workspace's workdir. If args is `None`, the
+        default shell is used.
+
+        For the default shell, `$SHELL` environment variable is attempted first
+        with fallbacks to `bash` and `sh` (in that order). The shell binary must
+        be found in the system `$PATH`.
+
+        The command is executed in the workspace's workdir directory, which
+        contains the cloned Git repository. The process's stdout and stderr are
+        not captured, allowing for interactive use.
+
+        Args:
+            args: The command and arguments to run. If `None`, runs the default
+                shell.
+
+        Returns:
+            A `subprocess.CompletedProcess` object containing the process
+            metadata, including the return code.
+
+        Raises:
+            FileNotFoundError: If the shell or command is not found in `$PATH`.
+        """
+        if args is None:
+            shell = os.environ.get("SHELL")
+
+            # If no default `$SHELL` is set, or if the shell binary is not
+            # found, attempt to use `bash` or `sh` as a fallback.
+            if not shell or shutil.which(shell) is None:
+                shell = shutil.which("bash") or shutil.which("sh")
+
+            # If there is no shell available (both `$SHELL` and fallbacks are
+            # missing), raise an error.
+            if not shell:
+                message = "No shell binary available."
+                raise FileNotFoundError(message)
+
+            # Use the shell as the command to run.
+            args = [shell]
+
+        # Might raise `FileNotFoundError` if the command is not found.
+        return subprocess.run(
+            args,
+            # Run the command in the workspace's workdir.
+            cwd=self.workdir_path,
+            # Do not raise an exception if the command fails in order to
+            # propagate the exit code.
+            check=False,
+            # Do not capture the output because the shell should be interactive.
+            capture_output=False,
+        )
