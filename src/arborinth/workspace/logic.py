@@ -14,6 +14,7 @@ import subprocess
 import typing
 
 from arborinth import _util
+from arborinth.shell import JailBackend
 
 if typing.TYPE_CHECKING:
     import pathlib
@@ -174,3 +175,30 @@ class Workspace:
         self.unregister_as_remote()
 
         shutil.rmtree(self.root_path)
+
+    def shell(
+        self,
+        args: typing.Sequence[str] | None = None,
+        *,
+        jail_backend: JailBackend = JailBackend.NONE,
+    ) -> subprocess.CompletedProcess:
+        """Run a shell or command in this workspace with the specified jail backend.
+
+        This opens a shell session or runs a command in the workspace's workdir
+        with the specified jail backend. If `args` is `None`, the jail's default
+        behavior is used.
+
+        The command is executed in the workspace's workdir directory, which
+        contains the cloned Git repository. The process's stdout and stderr are
+        not captured, allowing for interactive use.
+
+        Args:
+            args: The command and arguments to run. If `None`, runs the default
+                shell.
+            jail_backend: The jail backend to use.
+
+        Returns:
+            A `subprocess.CompletedProcess` object containing the process
+            metadata, including the return code.
+        """
+        return jail_backend.value(workdir_path=self.workdir_path).run(args=args)
