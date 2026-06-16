@@ -8,6 +8,26 @@ authors = [
 ]
 requires-python = ">=3.12"
 dependencies = ["click"]
+license = "MIT"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Software Development :: Version Control :: Git",
+    "Topic :: Utilities",
+    "Typing :: Typed",
+]
+keywords = ["git", "workspace", "isolation", "sandbox", "security"]
+
+[project.urls]
+Homepage = "https://github.com/ErwinJanssen/arborinth"
+Documentation = "https://github.com/ErwinJanssen/arborinth#readme"
+Repository = "https://github.com/ErwinJanssen/arborinth.git"
+Issues = "https://github.com/ErwinJanssen/arborinth/issues"
+Changelog = "https://github.com/ErwinJanssen/arborinth/blob/main/CHANGELOG.md"
 
 [project.scripts]
 arborinth = "arborinth.cli:main"
