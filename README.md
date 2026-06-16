@@ -61,10 +61,11 @@ heart of it all.
 
 Arborinth is currently in the **early development phase**.
 
-A basic implementation of the `project` and `workspace` modules exists. The
-`project` module can be used to inspect the Git repository root from a given
+A basic implementation of the `project`, `workspace` and `shell` modules exists.
+The `project` module can be used to inspect the Git repository root from a given
 working directory, and the `workspace` module provides isolated workspaces where
-untrusted code can operate safely.
+untrusted code can operate safely. The `shell` module provides the ability to
+run shell sessions or commands inside workspaces.
 
 ## Concepts
 
@@ -79,6 +80,14 @@ A workspace is an isolated environment derived from a project's Git repository.
 Each workspace contains its own clone of the repository (in the `workdir`
 subdirectory) where untrusted code can perform operations without affecting the
 original repository or other workspaces.
+
+### Shell
+
+The shell module provides the ability to run shell sessions or commands inside
+workspaces. It uses a jail abstraction to control the execution environment.
+Currently, a `NoneJail` backend is available which runs commands directly on the
+host (without isolation) in the workspace's working directory. This is intended
+for convenience when you are certain the commands are safe.
 
 ## Usage
 
@@ -115,12 +124,29 @@ arborinth workspace info my_workspace
 arborinth workspace delete my_workspace
 ```
 
+### shell command
+
+The `shell` subcommand provides operations for running shell sessions or
+commands in workspaces.
+
+```bash
+# Open a shell session in a workspace
+arborinth shell my_workspace
+
+# Run a command in a workspace
+arborinth shell my_workspace echo "Hello, World!"
+
+# Run a command with flags in a workspace (note the `--` separator)
+arborinth shell my_workspace -- git branch --all
+```
+
 ### Python API
 
 Both `Project` and `Workspace` classes can be used programmatically:
 
 ```python
 from arborinth import Project
+from arborinth.shell import JailBackend
 
 # Create a project with the current working directory
 project = Project()
@@ -142,13 +168,18 @@ workspaces = project.workspaces
 # Retrieve a specific workspace
 ws = project.workspace("my_workspace")
 
+# Run a shell or command in a workspace
+result = ws.shell(args=["echo", "hello"], jail_backend=JailBackend.NONE)
+print(f"Exit code: {result.returncode}")
+
 # Delete a workspace
 ws.delete()
 ```
 
 The `Project` class validates that the working directory exists and is within a
 Git repository. Workspace names are validated to prevent path traversal attacks
-and other security issues.
+and other security issues. The `shell` method uses a jail backend to control
+the execution environment.
 
 ## Development
 
