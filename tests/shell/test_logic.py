@@ -66,6 +66,58 @@ class TestNoneJail:
         with pytest.raises(FileNotFoundError, match="No such file"):
             jail.run(args=["nonexistent_command_xyz"])
 
+    def test_build_command_with_args_returns_args_as_is(
+        self, tmp_path: pathlib.Path
+    ) -> None:
+        """`NoneJail.build_command` with args should return them unchanged."""
+        jail = NoneJail(workdir_path=tmp_path)
+        args = ["echo", "hello", "world"]
+
+        result = jail.build_command(args=args)
+
+        assert result == args
+
+    def test_build_command_with_no_args_uses_default_shell(
+        self, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """`NoneJail.build_command` with no args should use default shell."""
+        jail = NoneJail(workdir_path=tmp_path)
+
+        # Set a specific SHELL to test the default behavior
+        monkeypatch.setenv("SHELL", "/bin/sh")
+
+        result = jail.build_command(args=None)
+
+        assert result == ["/bin/sh"]
+
+    def test_build_command_with_no_shell_env_var_uses_fallbacks(
+        self, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """`NoneJail.build_command` with no SHELL env var should use fallbacks."""
+        jail = NoneJail(workdir_path=tmp_path)
+
+        # Unset SHELL to test fallback behavior
+        monkeypatch.delenv("SHELL", raising=False)
+
+        result = jail.build_command(args=None)
+
+        # Should fall back to bash or sh (may be full path)
+        assert result[0].endswith(("bash", "sh"))
+        assert len(result) == 1
+
+    def test_build_command_with_no_shell_available_raises(
+        self, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """`NoneJail.build_command` with no shell available should raise."""
+        jail = NoneJail(workdir_path=tmp_path)
+
+        # Unset SHELL and mock shutil.which to return None
+        monkeypatch.delenv("SHELL", raising=False)
+        monkeypatch.setattr("shutil.which", lambda _: None)
+
+        with pytest.raises(FileNotFoundError, match="No shell binary available"):
+            jail.build_command(args=None)
+
 
 class TestJailBackend:
     """Tests for the `JailBackend` enum."""

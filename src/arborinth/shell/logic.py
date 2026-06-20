@@ -44,6 +44,23 @@ class Jail(abc.ABC):
             metadata, including the return code.
         """
 
+    @abc.abstractmethod
+    def build_command(
+        self, args: typing.Sequence[str] | None = None
+    ) -> typing.Sequence[str]:
+        """Build the command that will be executed by `run()`.
+
+        This method is useful if you want to run the command in a different way
+        than the default `run()` method. The implementation of this method
+        depends heavily on the jail type.
+
+        Args:
+            args: The dynamic arguments that will be passed to the command.
+
+        Returns:
+            The command to run in a list of strings.
+        """
+
 
 @dataclasses.dataclass(frozen=True, kw_only=True)
 class NoneJail(Jail):
@@ -83,6 +100,34 @@ class NoneJail(Jail):
         Raises:
             FileNotFoundError: If the shell or command is not found in `$PATH`.
         """
+        command = self.build_command(args)
+
+        # Might raise `FileNotFoundError` if the command is not found.
+        return subprocess.run(
+            command,
+            # Run the command in the jail's workdir.
+            cwd=self.workdir_path,
+            # Do not raise an exception if the command fails in order to
+            # propagate the exit code.
+            check=False,
+            # Do not capture the output because the shell should be interactive.
+            capture_output=False,
+        )
+
+    def build_command(
+        self, args: typing.Sequence[str] | None = None
+    ) -> typing.Sequence[str]:
+        """Build the command to pass to self.run().
+
+        If args is not `None`, it is returned as-is. Otherwise, the default
+        shell is used.
+
+        Args:
+            args: The command to run.
+
+        Returns:
+            The command to pass to self.run().
+        """
         if args is None:
             shell = os.environ.get("SHELL")
 
@@ -100,17 +145,7 @@ class NoneJail(Jail):
             # Use the shell as the command to run.
             args = [shell]
 
-        # Might raise `FileNotFoundError` if the command is not found.
-        return subprocess.run(
-            args,
-            # Run the command in the jail's workdir.
-            cwd=self.workdir_path,
-            # Do not raise an exception if the command fails in order to
-            # propagate the exit code.
-            check=False,
-            # Do not capture the output because the shell should be interactive.
-            capture_output=False,
-        )
+        return args
 
 
 class JailBackend(enum.Enum):
