@@ -10,12 +10,120 @@ import abc
 import dataclasses
 import enum
 import os
+import pathlib
 import shutil
 import subprocess
 import typing
 
-if typing.TYPE_CHECKING:
-    import pathlib
+
+class MountType(enum.Enum):
+    """Types of mounts supported in a jail.
+
+    Attributes:
+        RO: Read-only bind mount.
+        RW: Read-write bind mount.
+        TMPFS: Tmpfs mount.
+        DEV: /dev mount.
+        PROC: /proc mount.
+    """
+
+    RO = "ro"
+    RW = "rw"
+    TMPFS = "tmpfs"
+    DEV = "dev"
+    PROC = "proc"
+
+
+@dataclasses.dataclass(frozen=True, kw_only=True)
+class MountSpec:
+    """Specification for a mount in a jail.
+
+    This is used to configure mounts in a jail. The jail itself will handle
+    the actual mounting, if supported by the jail type.
+
+    Attributes:
+        mount_type: Type of mount, see `MountType`.
+        source: Source path for bind mounts. For mount types that do not require
+            a source (e.g. `/proc` and `/dev`) this field is ignored. For bind
+            mounts, this is the path to the source directory or file, if
+            omitted, the destination path will be used as the source.
+        dest: Destination path inside the jail.
+    """
+
+    mount_type: MountType
+    source: pathlib.Path | None
+    dest: pathlib.Path
+
+    @classmethod
+    def from_spec(cls, spec: str) -> typing.Self:
+        """Parse a mount specification string.
+
+        Supported formats:
+        - ro:dest (ro-bind with same source and dest path)
+        - rw:dest (rw-bind with same source and dest path)
+        - ro:source:dest (ro-bind source to dest)
+        - rw:source:dest (rw-bind source to dest)
+        - tmpfs:dest (tmpfs mount)
+        - dev:dest (devfs mount, usually `/dev`)
+        - proc:dest (procfs mount, usually `/proc`)
+
+        Args:
+            spec: The mount specification string.
+
+        Returns:
+            A MountSpec instance.
+
+        Raises:
+            ValueError: If the spec format is invalid.
+        """
+        # Split the spec into parts.
+        parts = spec.split(":")
+
+        # Validate the number of parts, if there are too few or too many parts,
+        # raise an error.
+        if len(parts) < 2:  # noqa: PLR2004
+            message = f"Invalid mount spec, too few parts: {spec}"
+            raise ValueError(message)
+
+        if len(parts) > 3:  # noqa: PLR2004
+            message = f"Invalid mount spec, too many parts: {spec}"
+            raise ValueError(message)
+
+        # To simplify the logic below, if the spec is missing a source path,
+        # insert `None` as the source path.
+        if len(parts) == 2:  # noqa: PLR2004
+            parts.insert(1, None)
+
+        # Unpack the parts into variables.
+        mount_type_str, source_path_str, destination_path_str = parts
+
+        # Validate the mount type. If the mount type is invalid, raise an error.
+        try:
+            mount_type = MountType(mount_type_str)
+        except ValueError:
+            message = f"Invalid mount type: {mount_type_str}"
+            raise ValueError(message) from None
+
+        # Convert the source and destination paths to `pathlib.Path` objects.
+        source_path = pathlib.Path(source_path_str) if source_path_str else None
+        destination_path = pathlib.Path(destination_path_str)
+
+        # These mount types only support a destination path. If the source path
+        # is not `None`, raise an error.
+        if (
+            mount_type in (MountType.TMPFS, MountType.DEV, MountType.PROC)
+            and source_path is not None
+        ):
+            message = f"Mount type {mount_type} only supports a destination path"
+            raise ValueError(message)
+
+        # At this point, the mount type is valid and the source and destination
+        # paths are valid. Return the parsed mount spec.
+        return cls(
+            mount_type=mount_type,
+            source=source_path,
+            dest=destination_path,
+        )
 
 
 @dataclasses.dataclass(frozen=True, kw_only=True)
