@@ -7,7 +7,17 @@ import typing
 
 import pytest
 
-from arborinth.shell import BwrapJail, Jail, JailBackend, JailConfig, MountSpec, MountType, NoneJail
+from arborinth.shell import (
+    BwrapJail,
+    Jail,
+    JailBackend,
+    JailConfig,
+    MountSpec,
+    MountType,
+    NoneJail,
+    mistral_vibe_preset,
+    opencode_preset,
+)
 
 if typing.TYPE_CHECKING:
     import pathlib
@@ -273,6 +283,61 @@ class TestJailConfig:
         assert len(merged.additional_mounts) == 2
         assert merged.additional_mounts[0] == mount1
         assert merged.additional_mounts[1] == mount2
+
+    def test_preset_mistral_vibe(
+        self, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """`mistral_vibe_preset` should return valid config."""
+        mock_home = tmp_path / "home"
+        monkeypatch.setattr("pathlib.Path.home", lambda: mock_home)
+
+        config = mistral_vibe_preset()
+
+        assert config.workdir_path == pathlib.Path(".")
+        # Check that the preset has the expected mounts
+        mount_sources = [m.source for m in config.additional_mounts]
+        assert mock_home / ".config" / "mistral-vibe" in mount_sources
+        assert mock_home / ".cache" / "mistral-vibe" in mount_sources
+
+    def test_preset_opencode(
+        self, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """`opencode_preset` should return valid config."""
+        mock_home = tmp_path / "home"
+        monkeypatch.setattr("pathlib.Path.home", lambda: mock_home)
+
+        config = opencode_preset()
+
+        assert config.workdir_path == pathlib.Path(".")
+        mount_sources = [m.source for m in config.additional_mounts]
+        assert mock_home / ".config" / "opencode" in mount_sources
+        assert mock_home / ".cache" / "opencode" in mount_sources
+        assert mock_home / ".local" / "share" / "opencode" in mount_sources
+
+    def test_preset_merge_with_overrides(
+        self, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Preset configs should be mergeable with overrides."""
+        mock_home = tmp_path / "home"
+        monkeypatch.setattr("pathlib.Path.home", lambda: mock_home)
+
+        preset = mistral_vibe_preset()
+        overrides = JailConfig(
+            additional_mounts=[
+                MountSpec(
+                    mount_type=MountType.RW,
+                    source=tmp_path / "custom_cache",
+                    dest=tmp_path / "custom_cache",
+                ),
+            ],
+        )
+        config = preset | overrides
+
+        # Should have preset mounts plus override
+        mount_sources = [m.source for m in config.additional_mounts]
+        assert mock_home / ".config" / "mistral-vibe" in mount_sources
+        assert mock_home / ".cache" / "mistral-vibe" in mount_sources
+        assert tmp_path / "custom_cache" in mount_sources
 
 
 class TestJailBackend:

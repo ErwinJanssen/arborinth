@@ -126,6 +126,67 @@ class MountSpec:
         )
 
 
+# Jail Presets
+
+def mistral_vibe_preset() -> JailConfig:
+    """Create a JailConfig preset for Mistral Vibe agent.
+
+    Provides read-only access to Mistral Vibe configuration and read-write
+    access to its cache directory.
+
+    Returns:
+        JailConfig with Mistral Vibe-specific paths.
+    """
+    home = pathlib.Path.home()
+    return JailConfig(
+        workdir_path=pathlib.Path("."),  # Will be overridden
+        additional_mounts=[
+            MountSpec(
+                mount_type=MountType.RO,
+                source=home / ".config" / "mistral-vibe",
+                dest=home / ".config" / "mistral-vibe",
+            ),
+            MountSpec(
+                mount_type=MountType.RW,
+                source=home / ".cache" / "mistral-vibe",
+                dest=home / ".cache" / "mistral-vibe",
+            ),
+        ],
+    )
+
+
+def opencode_preset() -> JailConfig:
+    """Create a JailConfig preset for OpenCode.
+
+    Provides read-only access to OpenCode configuration and read-write
+    access to its cache and data directories.
+
+    Returns:
+        JailConfig with OpenCode-specific paths.
+    """
+    home = pathlib.Path.home()
+    return JailConfig(
+        workdir_path=pathlib.Path("."),  # Will be overridden
+        additional_mounts=[
+            MountSpec(
+                mount_type=MountType.RO,
+                source=home / ".config" / "opencode",
+                dest=home / ".config" / "opencode",
+            ),
+            MountSpec(
+                mount_type=MountType.RW,
+                source=home / ".cache" / "opencode",
+                dest=home / ".cache" / "opencode",
+            ),
+            MountSpec(
+                mount_type=MountType.RW,
+                source=home / ".local" / "share" / "opencode",
+                dest=home / ".local" / "share" / "opencode",
+            ),
+        ],
+    )
+
+
 @dataclasses.dataclass(frozen=True, kw_only=True)
 class JailConfig:
     """Configuration for a jail, backend-agnostic.

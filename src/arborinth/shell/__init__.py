@@ -6,4 +6,14 @@ workspaces.
 
 # ruff: noqa: F401 (unused-import)
 
-from .logic import BwrapJail, Jail, JailBackend, JailConfig, MountSpec, MountType, NoneJail
+from .logic import (
+    BwrapJail,
+    Jail,
+    JailBackend,
+    JailConfig,
+    MountSpec,
+    MountType,
+    NoneJail,
+    mistral_vibe_preset,
+    opencode_preset,
+)

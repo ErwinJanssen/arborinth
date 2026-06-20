@@ -14,7 +14,7 @@ import subprocess
 import typing
 
 from arborinth import _util
-from arborinth.shell import JailBackend
+from arborinth.shell import JailBackend, JailConfig, MountSpec
 
 if typing.TYPE_CHECKING:
     import pathlib
@@ -181,6 +181,12 @@ class Workspace:
         args: typing.Sequence[str] | None = None,
         *,
         jail_backend: JailBackend = JailBackend.NONE,
+        jail_config: JailConfig | None = None,
+        project_root_path: pathlib.Path | None = None,
+        home_path: pathlib.Path | None = None,
+        additional_mounts: typing.Sequence[str] | None = None,
+        hide_home: bool = True,
+        expose_path_entries: bool = True,
     ) -> subprocess.CompletedProcess:
         """Run a shell or command in this workspace with the specified jail backend.
 
@@ -196,12 +202,49 @@ class Workspace:
             args: The command and arguments to run. If `None`, runs the default
                 shell.
             jail_backend: The jail backend to use.
+            jail_config: A JailConfig object with all jail settings. If provided,
+                this takes precedence over individual jail_* parameters.
+            project_root_path: The project root path for .git access.
+                Defaults to the workspace's project repo_root_path.
+            home_path: The home directory to hide. Defaults to the current
+                user's home directory.
+            additional_mounts: Additional mount specifications (format: type:source[:dest]).
+            hide_home: Whether to hide the home directory. Defaults to True.
+            expose_path_entries: Whether to re-expose PATH entries from the
+                hidden home directory. Defaults to True.
 
         Returns:
             A `subprocess.CompletedProcess` object containing the process
             metadata, including the return code.
         """
-        return jail_backend.value(
+        # If jail_config is provided, use it (takes precedence)
+        if jail_config is not None:
+            # Apply defaults from workspace
+            if jail_config.workdir_path is None or jail_config.workdir_path == pathlib.Path("."):
+                jail_config = jail_config | JailConfig(workdir_path=self.workdir_path)
+            if jail_config.project_root_path is None:
+                jail_config = jail_config | JailConfig(project_root_path=self.project.repo_root_path)
+            jail = jail_backend.value(**dataclasses.asdict(jail_config))
+            return jail.run(args=args)
+
+        # Legacy: use individual parameters (for backward compatibility)
+        # Use project root from workspace if not specified
+        if project_root_path is None:
+            project_root_path = self.project.repo_root_path
+
+        # Parse mount specifications
+        mounts: list[MountSpec] = []
+        if additional_mounts:
+            for spec in additional_mounts:
+                mounts.append(MountSpec.from_spec(spec))
+
+        jail_class = jail_backend.value
+        jail = jail_class(
             workdir_path=self.workdir_path,
-            project_root_path=self.project.repo_root_path,
-        ).run(args=args)
+            project_root_path=project_root_path,
+            home_path=home_path,
+            additional_mounts=mounts,
+            hide_home=hide_home,
+            expose_path_entries=expose_path_entries,
+        )
+        return jail.run(args=args)
