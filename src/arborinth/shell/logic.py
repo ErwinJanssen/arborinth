@@ -134,9 +134,23 @@ class Jail(abc.ABC):
 
     Attributes:
         workdir_path: The directory to run commands in.
+        project_root_path: The root path of the project (Git repository).
+            Used for binding .git directory as read-only.
+        home_path: The home directory to hide. Defaults to the current user's
+            home directory. Set to None to not hide any home directory.
+        additional_mounts: Additional mounts to create in the jail. Order matters
+            - later mounts override earlier ones.
+        hide_home: Whether to hide the home directory.
+        expose_path_entries: Whether to re-expose PATH entries from the hidden
+            home directory as read-only.
     """
 
     workdir_path: pathlib.Path
+    project_root_path: pathlib.Path | None = None
+    home_path: pathlib.Path | None = None
+    additional_mounts: list[MountSpec] = dataclasses.field(default_factory=list)
+    hide_home: bool = True
+    expose_path_entries: bool = True
 
     @abc.abstractmethod
     def run(
@@ -256,7 +270,209 @@ class NoneJail(Jail):
         return args
 
 
+@dataclasses.dataclass(frozen=True, kw_only=True)
+class BwrapJail(Jail):
+    """A jail that uses bubblewrap (bwrap) for sandboxing.
+
+    This jail uses bubblewrap to provide a sandboxed environment with controlled
+    filesystem access. By default, only the workdir is writable, and the
+    following are accessible read-only:
+    - Standard system paths (/usr, /etc, /lib, /lib64, /bin, /sbin)
+    - The .git directory from the project root
+
+    The home directory is hidden by default (replaced with a tmpfs), and PATH
+    entries from the hidden home directory are re-exposed as read-only at their
+    original paths.
+
+    Requires bubblewrap (bwrap) to be installed and available in PATH.
+
+    Raises:
+        FileNotFoundError: If bwrap is not found in PATH.
+    """
+
+    def _get_home_path(self) -> pathlib.Path:
+        """Get the home path to use for hiding."""
+        if self.home_path is not None:
+            return self.home_path
+        return pathlib.Path.home()
+
+    def _re_expose_path_entries(self, home: pathlib.Path) -> list[MountSpec]:
+        """Re-expose PATH entries that are under home as read-only.
+
+        Returns MountSpec objects for each PATH entry under home.
+
+        For symlinks (like ~/.nix-profile), we resolve to the real path but
+        bind to the original symlink path.
+
+        Args:
+            home: The home directory path.
+
+        Returns:
+            List of MountSpec objects for ro-bind mounts.
+        """
+        result: list[MountSpec] = []
+        path_env = os.environ.get("PATH", "")
+
+        for entry in path_env.split(":"):
+            if not entry:
+                continue
+            entry_path = pathlib.Path(entry)
+            if not entry_path.exists():
+                continue
+            try:
+                # Check if the ORIGINAL entry path (before resolving symlinks) is under home
+                # This handles cases like ~/.nix-profile which is a symlink
+                try:
+                    rel_path = entry_path.relative_to(home)
+                    is_under_home = True
+                except ValueError:
+                    is_under_home = False
+
+                if is_under_home:
+                    # Resolve to the real path (following symlinks)
+                    real_entry = entry_path.resolve()
+                    # Bind the real path to the ORIGINAL entry path
+                    result.append(
+                        MountSpec(
+                            mount_type=MountType.RO, source=real_entry, dest=entry_path
+                        )
+                    )
+            except (OSError, RuntimeError):
+                # If we can't resolve the path, skip it
+                pass
+
+        return result
+
+    def _build_bwrap_args(self) -> list[str]:
+        """Build the bwrap command line arguments.
+
+        Returns:
+            List of arguments for the bwrap command.
+        """
+        args: list[str] = [
+            "bwrap",
+            "--unshare-all",
+            "--die-with-parent",
+            "--new-session",
+        ]
+
+        # Bind everything as read-only from the root
+        root = pathlib.Path("/")
+        if root.exists():
+            args.extend(["--ro-bind", "/", "/"])
+
+        # Hide /home directory completely
+        if self.hide_home:
+            args.extend(["--tmpfs", "/home"])
+
+        # Override with writable workdir
+        args.extend(["--bind", str(self.workdir_path), str(self.workdir_path)])
+
+        # Override /dev with device access
+        args.extend(["--dev", "/dev"])
+
+        # Override /proc with process filesystem
+        args.extend(["--proc", "/proc"])
+
+        # Override /tmp with a new tmpfs
+        args.extend(["--tmpfs", "/tmp"])
+
+        # Override /sys with tmpfs
+        args.extend(["--tmpfs", "/sys"])
+
+        # Project .git directory (ro)
+        if self.project_root_path is not None:
+            git_dir = self.project_root_path / ".git"
+            if git_dir.exists():
+                args.extend(["--ro-bind", str(git_dir), str(git_dir)])
+
+        # Re-expose PATH entries from home as ro at their original paths
+        if self.hide_home and self.expose_path_entries:
+            home = self._get_home_path()
+            path_mounts = self._re_expose_path_entries(home)
+            for mount in path_mounts:
+                args.extend(["--ro-bind", str(mount.source), str(mount.dest)])
+
+        # Additional mounts (order matters - later overrides earlier)
+        for mount in self.additional_mounts:
+            if mount.mount_type == MountType.RO:
+                args.extend(["--ro-bind", str(mount.source), str(mount.dest)])
+            elif mount.mount_type == MountType.RW:
+                args.extend(["--bind", str(mount.source), str(mount.dest)])
+            elif mount.mount_type == MountType.TMPFS:
+                args.extend(["--tmpfs", str(mount.dest)])
+            elif mount.mount_type == MountType.DEV:
+                args.extend(["--dev", str(mount.dest)])
+            elif mount.mount_type == MountType.PROC:
+                args.extend(["--proc", str(mount.dest)])
+
+        return args
+
+    def run(
+        self, args: typing.Sequence[str] | None = None
+    ) -> subprocess.CompletedProcess:
+        """Run a shell session or command inside the bwrap sandbox.
+
+        If no args are provided, the default shell is used: the value of the
+        `$SHELL` environment variable is attempted first with fallbacks to
+        `bash` and `sh` (in that order). The shell binary must be found in the
+        system `$PATH`.
+
+        The process's stdout and stderr are not captured (allowing for
+        interactive use) and the exit code is not checked.
+
+        Args:
+            args: The command to run.
+
+        Returns:
+            A `subprocess.CompletedProcess` object containing the process
+            metadata, including the return code.
+
+        Raises:
+            FileNotFoundError: If bwrap or the shell/command is not found.
+        """
+        # Check if bwrap is available
+        bwrap_path = shutil.which("bwrap")
+        if bwrap_path is None:
+            message = "bwrap (bubblewrap) is not installed or not found in PATH"
+            raise FileNotFoundError(message)
+
+        bwrap_args = self._build_bwrap_args()
+
+        if args is None:
+            # Use default shell
+            standard_shells = ["/bin/bash", "/bin/sh", "/usr/bin/bash", "/usr/bin/sh"]
+            shell = None
+            for s in standard_shells:
+                if pathlib.Path(s).exists():
+                    shell = s
+                    break
+
+            if not shell:
+                shell = os.environ.get("SHELL")
+
+            if not shell or not pathlib.Path(shell).exists():
+                shell = shutil.which("bash") or shutil.which("sh")
+
+            if not shell:
+                message = "No shell binary available."
+                raise FileNotFoundError(message)
+
+            args = [shell]
+
+        # Combine bwrap args with the command args
+        full_args = bwrap_args + list(args)
+
+        return subprocess.run(
+            full_args,
+            cwd=self.workdir_path,
+            check=False,
+            capture_output=False,
+        )
+
+
 class JailBackend(enum.Enum):
     """Enum for the different jail backends."""
 
     NONE = NoneJail
+    BWRAP = BwrapJail

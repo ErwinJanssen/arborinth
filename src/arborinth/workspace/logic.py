@@ -201,4 +201,7 @@ class Workspace:
             A `subprocess.CompletedProcess` object containing the process
             metadata, including the return code.
         """
-        return jail_backend.value(workdir_path=self.workdir_path).run(args=args)
+        return jail_backend.value(
+            workdir_path=self.workdir_path,
+            project_root_path=self.project.repo_root_path,
+        ).run(args=args)
