@@ -6,4 +6,4 @@ workspaces.
 
 # ruff: noqa: F401 (unused-import)
 
-from .logic import BubblewrapJail, Jail, JailBackend, NoneJail
+from .logic import BubblewrapJail, Jail, JailBackend, MountSpec, MountType, NoneJail

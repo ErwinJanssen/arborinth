@@ -2,5 +2,5 @@
 # ruff: noqa: F401 (unused-import)
 
 from .project import Project
-from .shell import Jail, JailBackend
+from .shell import Jail, JailBackend, MountSpec, MountType
 from .workspace import Workspace
