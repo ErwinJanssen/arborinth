@@ -7,7 +7,7 @@ import typing
 
 import pytest
 
-from arborinth.shell import BwrapJail, Jail, JailBackend, MountSpec, MountType, NoneJail
+from arborinth.shell import BwrapJail, Jail, JailBackend, JailConfig, MountSpec, MountType, NoneJail
 
 if typing.TYPE_CHECKING:
     import pathlib
@@ -197,6 +197,82 @@ class TestNoneJail:
 
         with pytest.raises(FileNotFoundError, match="No shell binary available"):
             jail.build_command(args=None)
+
+
+class TestJailConfig:
+    """Tests for the `JailConfig` dataclass."""
+
+    def test_default_values(self) -> None:
+        """`JailConfig` should have sensible defaults."""
+        config = JailConfig()
+
+        assert config.workdir_path is None
+        assert config.project_root_path is None
+        assert config.home_path is None
+        assert config.additional_mounts == []
+        assert config.hide_home is True
+        assert config.expose_path_entries is True
+
+    def test_custom_values(self, tmp_path: pathlib.Path) -> None:
+        """`JailConfig` should accept custom values."""
+        project_root = tmp_path / "project"
+        home = tmp_path / "home"
+        ro_path = tmp_path / "ro"
+        rw_path = tmp_path / "rw"
+
+        config = JailConfig(
+            workdir_path=tmp_path,
+            project_root_path=project_root,
+            home_path=home,
+            additional_mounts=[
+                MountSpec(mount_type=MountType.RO, source=ro_path, dest=ro_path),
+                MountSpec(mount_type=MountType.RW, source=rw_path, dest=rw_path),
+            ],
+            hide_home=False,
+            expose_path_entries=False,
+        )
+
+        assert config.workdir_path == tmp_path
+        assert config.project_root_path == project_root
+        assert config.home_path == home
+        assert len(config.additional_mounts) == 2
+        assert config.hide_home is False
+        assert config.expose_path_entries is False
+
+    def test_merge_basic(self, tmp_path: pathlib.Path) -> None:
+        """`JailConfig` merge should combine values correctly."""
+        config1 = JailConfig(
+            workdir_path=tmp_path / "workdir1",
+            additional_mounts=[
+                MountSpec(mount_type=MountType.RO, source=tmp_path / "ro1", dest=tmp_path / "ro1"),
+            ],
+        )
+        config2 = JailConfig(
+            additional_mounts=[
+                MountSpec(mount_type=MountType.RO, source=tmp_path / "ro2", dest=tmp_path / "ro2"),
+            ],
+            hide_home=False,
+        )
+
+        merged = config1 | config2
+
+        assert merged.workdir_path == tmp_path / "workdir1"
+        assert len(merged.additional_mounts) == 2
+        assert merged.hide_home is False
+
+    def test_merge_additional_mounts_appends(self, tmp_path: pathlib.Path) -> None:
+        """`JailConfig.__or__` should append additional_mounts."""
+        mount1 = MountSpec(mount_type=MountType.RO, source=tmp_path / "m1", dest=tmp_path / "m1")
+        mount2 = MountSpec(mount_type=MountType.RW, source=tmp_path / "m2", dest=tmp_path / "m2")
+
+        config1 = JailConfig(additional_mounts=[mount1])
+        config2 = JailConfig(additional_mounts=[mount2])
+
+        merged = config1 | config2
+
+        assert len(merged.additional_mounts) == 2
+        assert merged.additional_mounts[0] == mount1
+        assert merged.additional_mounts[1] == mount2
 
 
 class TestJailBackend:

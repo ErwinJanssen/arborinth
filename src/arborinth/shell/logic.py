@@ -127,6 +127,60 @@ class MountSpec:
 
 
 @dataclasses.dataclass(frozen=True, kw_only=True)
+class JailConfig:
+    """Configuration for a jail, backend-agnostic.
+
+    This class holds all the configuration parameters for a jail, independent
+    of the backend used. Backends interpret these parameters according to
+    their own capabilities.
+
+    Attributes:
+        workdir_path: The directory to run commands in. If None, will be
+            set by the workspace.
+        project_root_path: The root path of the project (Git repository).
+            Used for binding .git directory. If None, will be set by the workspace.
+        home_path: The home directory to hide. Defaults to the current user's
+            home directory. Set to None to not hide any home directory.
+        additional_mounts: Additional mounts to create in the jail. Order matters
+            - later mounts override earlier ones.
+        hide_home: Whether to hide the home directory.
+        expose_path_entries: Whether to re-expose PATH entries from hidden
+            home directory as read-only.
+    """
+
+    workdir_path: pathlib.Path | None = None
+    project_root_path: pathlib.Path | None = None
+    home_path: pathlib.Path | None = None
+    additional_mounts: list[MountSpec] = dataclasses.field(default_factory=list)
+    hide_home: bool = True
+    expose_path_entries: bool = True
+
+    def __or__(self, other: "JailConfig") -> "JailConfig":
+        """Merge two JailConfigs, with other taking precedence.
+
+        Args:
+            other: The other config to merge with.
+
+        Returns:
+            A new JailConfig with merged values.
+        """
+        return JailConfig(
+            workdir_path=other.workdir_path if other.workdir_path is not None else self.workdir_path,
+            project_root_path=other.project_root_path
+            if other.project_root_path is not None
+            else self.project_root_path,
+            home_path=other.home_path if other.home_path is not None else self.home_path,
+            additional_mounts=self.additional_mounts + other.additional_mounts,
+            hide_home=other.hide_home if other.hide_home is not None else self.hide_home,
+            expose_path_entries=(
+                other.expose_path_entries
+                if other.expose_path_entries is not None
+                else self.expose_path_entries
+            ),
+        )
+
+
+@dataclasses.dataclass(frozen=True, kw_only=True)
 class Jail(abc.ABC):
     """Abstract base class for a jail.
 
