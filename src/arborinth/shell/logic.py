@@ -9,10 +9,10 @@ from __future__ import annotations
 import abc
 import dataclasses
 import enum
-import os
-import shutil
 import subprocess
 import typing
+
+from arborinth import _util
 
 if typing.TYPE_CHECKING:
     import pathlib
@@ -82,10 +82,8 @@ class NoneJail(Jail):
         This does **not** jail the process in any way, it should only be used if
         you are absolutely sure that the command you are running is safe.
 
-        If no args are provided, the default shell is used: the value of the
-        `$SHELL` environment variable is attempted first with fallbacks to
-        `bash` and `sh` (in that order). The shell binary must be found in the
-        system `$PATH`.
+        If no args are provided, the default shell is used (see
+        `arborinth._util.get_default_shell()` for resolution order).
 
         The process's stdout and stderr are not captured (allowing for
         interactive use) and the exit code is not checked.
@@ -120,7 +118,7 @@ class NoneJail(Jail):
         """Build the command to pass to self.run().
 
         If args is not `None`, it is returned as-is. Otherwise, the default
-        shell is used.
+        shell is used (via `arborinth._util.get_default_shell()`).
 
         Args:
             args: The command to run.
@@ -128,24 +126,7 @@ class NoneJail(Jail):
         Returns:
             The command to pass to self.run().
         """
-        if args is None:
-            shell = os.environ.get("SHELL")
-
-            # If no default `$SHELL` is set, or if the shell binary is not
-            # found, attempt to use `bash` or `sh` as a fallback.
-            if not shell or shutil.which(shell) is None:
-                shell = shutil.which("bash") or shutil.which("sh")
-
-            # If there is no shell available (both `$SHELL` and fallbacks are
-            # missing), raise an error.
-            if not shell:
-                message = "No shell binary available."
-                raise FileNotFoundError(message)
-
-            # Use the shell as the command to run.
-            args = [shell]
-
-        return args
+        return args if args is not None else [_util.get_default_shell()]
 
 
 class JailBackend(enum.Enum):

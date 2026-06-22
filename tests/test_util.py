@@ -83,3 +83,57 @@ class TestFormatInfo:
         mock_format = MockFormat()
         with pytest.raises(ValueError, match="Unknown format"):
             _util.format_info({"key": "value"}, mock_format)
+
+
+class TestGetDefaultShell:
+    """Tests for the get_default_shell function."""
+
+    def test_shell_from_env_var(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """get_default_shell should return $SHELL if it exists."""
+        monkeypatch.setenv("SHELL", "/bin/fish")
+        # Mock shutil.which to return the same path
+        monkeypatch.setattr(
+            "shutil.which", lambda x: "/bin/fish" if x == "/bin/fish" else None
+        )
+
+        result = _util.get_default_shell()
+        assert result == "/bin/fish"
+
+    def test_bash_fallback(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """get_default_shell should fall back to bash when $SHELL is not set."""
+        monkeypatch.delenv("SHELL", raising=False)
+        monkeypatch.setattr(
+            "shutil.which", lambda x: "/bin/bash" if x == "bash" else None
+        )
+
+        result = _util.get_default_shell()
+        assert result == "/bin/bash"
+
+    def test_sh_fallback(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """get_default_shell should fall back to sh as a last resort."""
+        monkeypatch.delenv("SHELL", raising=False)
+        monkeypatch.setattr("shutil.which", lambda x: "/bin/sh" if x == "sh" else None)
+
+        result = _util.get_default_shell()
+        assert result == "/bin/sh"
+
+    def test_invalid_shell_fallback(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """get_default_shell should fall back when $SHELL is invalid."""
+        monkeypatch.setenv("SHELL", "/usr/bin/fish")
+        # Mock shutil.which to return None for fish, /bin/bash for bash
+        monkeypatch.setattr(
+            "shutil.which", lambda x: "/bin/bash" if x == "bash" else None
+        )
+
+        result = _util.get_default_shell()
+        assert result == "/bin/bash"
+
+    def test_raises_when_no_shell_available(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """get_default_shell should raise FileNotFoundError if no shell is found."""
+        monkeypatch.delenv("SHELL", raising=False)
+        monkeypatch.setattr("shutil.which", lambda _: None)
+
+        with pytest.raises(FileNotFoundError, match="No shell binary available"):
+            _util.get_default_shell()

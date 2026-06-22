@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import enum
 import json
+import os
+import shutil
 import string
 
 import click
@@ -107,3 +109,35 @@ def validate_workspace_name(name: str) -> None:
     if any(c in name for c in string.whitespace):
         message = f"Workspace name cannot contain whitespace: {name}"
         raise ValueError(message)
+
+
+def get_default_shell() -> str:
+    """Return the path to the default shell for the current user.
+
+    The function attempts to determine the default shell in the following order:
+    1. The value of the `$SHELL` environment variable (if set and executable)
+    2. The `bash` binary (if found in `$PATH`)
+    3. The `sh` binary (if found in `$PATH`)
+
+    Returns:
+        The absolute path to the shell binary.
+
+    Raises:
+        FileNotFoundError: If no shell binary is available on the system.
+    """
+    shell: str | None = None
+
+    # First, try the $SHELL environment variable
+    env_shell = os.environ.get("SHELL")
+    if env_shell:
+        shell = shutil.which(env_shell)
+
+    # If $SHELL is not set or the binary doesn't exist, try fallbacks
+    if not shell:
+        shell = shutil.which("bash") or shutil.which("sh")
+
+    if not shell:
+        message = "No shell binary available."
+        raise FileNotFoundError(message)
+
+    return shell
