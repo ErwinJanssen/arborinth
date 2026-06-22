@@ -24,6 +24,23 @@ class TestShellCommand:
         assert "Run a shell or command in a workspace" in result.stdout
         assert "Usage:" in result.stdout
 
+    def test_shell_default_jail_backend(
+        self, cli_runner: click.testing.CliRunner, tmp_workspace: Workspace
+    ) -> None:
+        """`shell` command should default to NONE jail backend."""
+        repo_root_path = tmp_workspace.project.repo_root_path
+        with cli_runner.isolated_filesystem(temp_dir=repo_root_path):
+            # Verify the default is NONE by checking the help output
+            result = cli_runner.invoke(main, ["shell", "--help"])
+            assert "[default: none]" in result.stdout
+
+            # Verify it works with the default
+            result = cli_runner.invoke(
+                main,
+                ["shell", tmp_workspace.name, "echo", "test"],
+            )
+            assert result.exit_code == 0
+
     def test_shell_requires_workspace_name(
         self, cli_runner: click.testing.CliRunner, tmp_git_repo: pathlib.Path
     ) -> None:

@@ -149,7 +149,68 @@ class NoneJail(Jail):
         return args if args is not None else [_util.get_default_shell()]
 
 
+@dataclasses.dataclass(frozen=True, kw_only=True)
+class BubblewrapJail(Jail):
+    """A jail that uses bubblewrap (bwrap) for sandboxing.
+
+    This jail uses bubblewrap to provide a sandboxed environment with controlled
+    filesystem access. It binds the entire host filesystem read-only by default,
+    which means the sandboxed process can read any file on the host system.
+    Only the working directory is bound read-write.
+
+    Security note: This provides isolation but NOT security. A malicious process
+    can still read sensitive files from the host.
+
+    Requires bubblewrap (bwrap) to be installed and available in PATH.
+    """
+
+    def build_command(
+        self, args: typing.Sequence[str] | None = None
+    ) -> typing.Sequence[str]:
+        """Build the bwrap command line arguments.
+
+        Args:
+            args: The command to run. If None, the default shell is used.
+
+        Returns:
+            List of arguments for the bwrap command.
+        """
+        command = args or [_util.get_default_shell()]
+        workdir_str = str(self.workdir_path.resolve())
+        return [
+            "bwrap",
+            # Unshare all namespaces for proper isolation
+            "--unshare-all",
+            # Retain the network namespace to allow network access
+            "--share-net",
+            # Set working directory inside the sandbox
+            "--chdir",
+            workdir_str,
+            # Bind the root filesystem read-only
+            "--ro-bind",
+            "/",
+            "/",
+            # Provide private /dev and /proc
+            "--dev",
+            "/dev",
+            "--proc",
+            "/proc",
+            # Provide a fresh /tmp
+            "--tmpfs",
+            "/tmp",  # noqa: S108
+            # Bind the working directory read-write
+            "--bind",
+            workdir_str,
+            workdir_str,
+            # Separator between bwrap options and the command to run
+            "--",
+            # Add the command to execute
+            *command,
+        ]
+
+
 class JailBackend(enum.Enum):
     """Enum for the different jail backends."""
 
     NONE = NoneJail
+    BUBBLEWRAP = BubblewrapJail
