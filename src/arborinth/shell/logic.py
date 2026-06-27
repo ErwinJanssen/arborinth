@@ -30,19 +30,39 @@ class Jail(abc.ABC):
 
     workdir_path: pathlib.Path
 
-    @abc.abstractmethod
     def run(
         self, args: typing.Sequence[str] | None = None
     ) -> subprocess.CompletedProcess:
         """Run a shell session or command inside the jail's workdir.
 
+        The process's stdout and stderr are not captured (allowing for
+        interactive use) and the exit code is not checked.
+
         Args:
-            args: The command to run.
+            args: The command to run. If no args are provided, the default shell
+                is used (see `arborinth._util.get_default_shell()` for
+                resolution order).
 
         Returns:
             A `subprocess.CompletedProcess` object containing the process
             metadata, including the return code.
+
+        Raises:
+            FileNotFoundError: If the shell or command is not found in `$PATH`.
         """
+        command = self.build_command(args)
+
+        # Might raise `FileNotFoundError` if the command is not found.
+        return subprocess.run(
+            command,
+            # Run the command in the jail's workdir.
+            cwd=self.workdir_path,
+            # Do not raise an exception if the command fails in order to
+            # propagate the exit code.
+            check=False,
+            # Do not capture the output because the shell should be interactive.
+            capture_output=False,
+        )
 
     @abc.abstractmethod
     def build_command(
