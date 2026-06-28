@@ -356,16 +356,19 @@ class TestBubblewrapJailIntegration:
         if shutil.which("bwrap") is None:
             pytest.skip("bubblewrap not installed")
 
-    def test_cannot_write_to_root(self, tmp_path: pathlib.Path) -> None:
-        """Writing to root filesystem should fail (it's read-only)."""
+    @pytest.mark.parametrize(
+        "args",
+        [
+            pytest.param(["touch", "/test_write_denied"], id="root"),
+            pytest.param(["touch", "/etc/test_write_denied"], id="etc"),
+        ],
+    )
+    def test_cannot_write_to_readonly_paths(
+        self, args: list[str], tmp_path: pathlib.Path
+    ) -> None:
+        """Writing to readonly paths should fail."""
         jail = BubblewrapJail(workdir_path=tmp_path)
-        result = jail.run(args=["touch", "/test_write_denied"])
-        assert result.returncode != 0
-
-    def test_cannot_write_to_etc(self, tmp_path: pathlib.Path) -> None:
-        """Writing to /etc should fail (it's read-only)."""
-        jail = BubblewrapJail(workdir_path=tmp_path)
-        result = jail.run(args=["touch", "/etc/test_write_denied"])
+        result = jail.run(args=args)
         assert result.returncode != 0
 
     def test_can_write_to_workdir(self, tmp_path: pathlib.Path) -> None:
