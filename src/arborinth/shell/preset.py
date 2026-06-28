@@ -7,11 +7,25 @@ that can be applied via the ``--preset`` CLI option.
 from __future__ import annotations
 
 import dataclasses
+import os
 import pathlib
 
 from .logic import MountSpec, MountType
 
 _HOME = pathlib.Path.home()
+
+
+def _xdg_dir(env_var: str, default: pathlib.Path) -> pathlib.Path:
+    raw = os.environ.get(env_var)
+    if raw:
+        return pathlib.Path(raw).resolve()
+    return default
+
+
+_XDG_CONFIG_HOME = _xdg_dir("XDG_CONFIG_HOME", _HOME / ".config")
+_XDG_CACHE_HOME = _xdg_dir("XDG_CACHE_HOME", _HOME / ".cache")
+_XDG_DATA_HOME = _xdg_dir("XDG_DATA_HOME", _HOME / ".local" / "share")
+_XDG_STATE_HOME = _xdg_dir("XDG_STATE_HOME", _HOME / ".local" / "state")
 
 
 @dataclasses.dataclass(frozen=True)
@@ -36,23 +50,23 @@ BUILTIN_PRESETS: dict[str, Preset] = {
         mount_specs=(
             MountSpec(
                 mount_type=MountType.RO,
-                source=_HOME / ".config" / "opencode",
-                dest=_HOME / ".config" / "opencode",
+                source=_XDG_CONFIG_HOME / "opencode",
+                dest=_XDG_CONFIG_HOME / "opencode",
             ),
             MountSpec(
                 mount_type=MountType.RW,
-                source=_HOME / ".cache" / "opencode",
-                dest=_HOME / ".cache" / "opencode",
+                source=_XDG_CACHE_HOME / "opencode",
+                dest=_XDG_CACHE_HOME / "opencode",
             ),
             MountSpec(
                 mount_type=MountType.RW,
-                source=_HOME / ".local" / "share" / "opencode",
-                dest=_HOME / ".local" / "share" / "opencode",
+                source=_XDG_DATA_HOME / "opencode",
+                dest=_XDG_DATA_HOME / "opencode",
             ),
             MountSpec(
                 mount_type=MountType.RW,
-                source=_HOME / ".local" / "state" / "opencode",
-                dest=_HOME / ".local" / "state" / "opencode",
+                source=_XDG_STATE_HOME / "opencode",
+                dest=_XDG_STATE_HOME / "opencode",
             ),
         ),
     ),

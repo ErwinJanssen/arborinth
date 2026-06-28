@@ -7,7 +7,14 @@ import pathlib
 import pytest
 
 from arborinth.shell import MountSpec, MountType, get_preset, list_presets
-from arborinth.shell.preset import BUILTIN_PRESETS, Preset
+from arborinth.shell.preset import (
+    _XDG_CACHE_HOME,
+    _XDG_CONFIG_HOME,
+    _XDG_DATA_HOME,
+    _XDG_STATE_HOME,
+    BUILTIN_PRESETS,
+    Preset,
+)
 
 
 class TestPreset:
@@ -88,44 +95,40 @@ class TestPresetRegistry:
     def test_get_preset_has_config_mount(self) -> None:
         """The ``opencode`` preset should mount config as read-only."""
         p = get_preset("opencode")
-        home = pathlib.Path.home()
         config_mount = MountSpec(
             mount_type=MountType.RO,
-            source=home / ".config" / "opencode",
-            dest=home / ".config" / "opencode",
+            source=_XDG_CONFIG_HOME / "opencode",
+            dest=_XDG_CONFIG_HOME / "opencode",
         )
         assert config_mount in p.mount_specs
 
     def test_get_preset_has_cache_mount(self) -> None:
         """The ``opencode`` preset should mount cache as read-write."""
         p = get_preset("opencode")
-        home = pathlib.Path.home()
         cache_mount = MountSpec(
             mount_type=MountType.RW,
-            source=home / ".cache" / "opencode",
-            dest=home / ".cache" / "opencode",
+            source=_XDG_CACHE_HOME / "opencode",
+            dest=_XDG_CACHE_HOME / "opencode",
         )
         assert cache_mount in p.mount_specs
 
     def test_get_preset_has_data_mount(self) -> None:
         """The ``opencode`` preset should mount local share data as read-write."""
         p = get_preset("opencode")
-        home = pathlib.Path.home()
         data_mount = MountSpec(
             mount_type=MountType.RW,
-            source=home / ".local" / "share" / "opencode",
-            dest=home / ".local" / "share" / "opencode",
+            source=_XDG_DATA_HOME / "opencode",
+            dest=_XDG_DATA_HOME / "opencode",
         )
         assert data_mount in p.mount_specs
 
     def test_get_preset_has_state_mount(self) -> None:
         """The ``opencode`` preset should mount local state as read-write."""
         p = get_preset("opencode")
-        home = pathlib.Path.home()
         state_mount = MountSpec(
             mount_type=MountType.RW,
-            source=home / ".local" / "state" / "opencode",
-            dest=home / ".local" / "state" / "opencode",
+            source=_XDG_STATE_HOME / "opencode",
+            dest=_XDG_STATE_HOME / "opencode",
         )
         assert state_mount in p.mount_specs
 
