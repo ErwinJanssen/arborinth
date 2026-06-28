@@ -74,6 +74,7 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = [
     "S101",  # `assert` (tests should use assert statements)
+    "SLF001",  # Private member access (tests may test private methods)
 ]
 
 [tool.ruff.lint.pydocstyle]

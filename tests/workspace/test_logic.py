@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import os
+import pathlib
 import shutil
 import subprocess
 import typing
 
 import pytest
 
+from arborinth.shell import MountSpec, MountType
 from arborinth.workspace import logic
 from tests import INVALID_WORKSPACE_NAME_INPUTS, generate_random_string
 
@@ -183,3 +185,11 @@ class TestWorkspaceShell:
         """`shell` with invalid command should raise `FileNotFoundError`."""
         with pytest.raises(FileNotFoundError, match="No such file"):
             tmp_workspace.shell(args=["nonexistent_command_xyz"])
+
+    def test_shell_accepts_mount_specs(self, tmp_workspace: Workspace) -> None:
+        """`shell` should accept mount_specs without error."""
+        mount = MountSpec(
+            mount_type=MountType.RO, source=None, dest=pathlib.Path("/dest")
+        )
+        proc = tmp_workspace.shell(args=["echo", "test"], mount_specs=[mount])
+        assert proc.returncode == 0

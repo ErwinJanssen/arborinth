@@ -134,9 +134,11 @@ class Jail(abc.ABC):
 
     Attributes:
         workdir_path: The directory to run commands in.
+        mount_specs: Additional mount specifications for this jail.
     """
 
     workdir_path: pathlib.Path
+    mount_specs: typing.Sequence[MountSpec] = ()
 
     def run(
         self, args: typing.Sequence[str] | None = None
@@ -200,6 +202,10 @@ class NoneJail(Jail):
     The main purpose of this class is convenience, so that you can quickly run
     commands in the target directory without having to manually `cd` into it.
     For example, when you want to perform git operations in another repository.
+
+    Note:
+        `mount_specs` are accepted but ignored by this jail since it does not
+        use any sandboxing.
     """
 
     def run(
@@ -272,6 +278,30 @@ class BubblewrapJail(Jail):
     Requires bubblewrap (bwrap) to be installed and available in PATH.
     """
 
+    @staticmethod
+    def _mount_to_bwrap_args(mount: MountSpec) -> list[str]:
+        """Convert a MountSpec to the corresponding bwrap arguments.
+
+        Args:
+            mount: The mount specification to convert.
+
+        Returns:
+            A list of bwrap arguments for this mount.
+        """
+        if mount.mount_type == MountType.RO:
+            source = str(mount.source) if mount.source else str(mount.dest)
+            return ["--ro-bind", source, str(mount.dest)]
+        if mount.mount_type == MountType.RW:
+            source = str(mount.source) if mount.source else str(mount.dest)
+            return ["--bind", source, str(mount.dest)]
+        if mount.mount_type == MountType.TMPFS:
+            return ["--tmpfs", str(mount.dest)]
+        if mount.mount_type == MountType.DEV:
+            return ["--dev", str(mount.dest)]
+        if mount.mount_type == MountType.PROC:
+            return ["--proc", str(mount.dest)]
+        return []
+
     def build_command(
         self, args: typing.Sequence[str] | None = None
     ) -> typing.Sequence[str]:
@@ -285,7 +315,8 @@ class BubblewrapJail(Jail):
         """
         command = args or [_util.get_default_shell()]
         workdir_str = str(self.workdir_path.resolve())
-        return [
+
+        bwrap_args: list[str] = [
             "bwrap",
             # Unshare all namespaces for proper isolation
             "--unshare-all",
@@ -310,6 +341,14 @@ class BubblewrapJail(Jail):
             "--bind",
             workdir_str,
             workdir_str,
+        ]
+
+        # Add user-specified mounts after the defaults
+        for mount in self.mount_specs:
+            bwrap_args.extend(self._mount_to_bwrap_args(mount))
+
+        return [
+            *bwrap_args,
             # Separator between bwrap options and the command to run
             "--",
             # Add the command to execute

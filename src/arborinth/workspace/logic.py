@@ -14,7 +14,7 @@ import subprocess
 import typing
 
 from arborinth import _util
-from arborinth.shell import JailBackend
+from arborinth.shell import JailBackend, MountSpec
 
 if typing.TYPE_CHECKING:
     import pathlib
@@ -181,6 +181,7 @@ class Workspace:
         args: typing.Sequence[str] | None = None,
         *,
         jail_backend: JailBackend = JailBackend.NONE,
+        mount_specs: typing.Sequence[MountSpec] = (),
     ) -> subprocess.CompletedProcess:
         """Run a shell or command in this workspace with the specified jail backend.
 
@@ -196,9 +197,12 @@ class Workspace:
             args: The command and arguments to run. If `None`, runs the default
                 shell.
             jail_backend: The jail backend to use.
+            mount_specs: Additional mount specifications to pass to the jail.
 
         Returns:
             A `subprocess.CompletedProcess` object containing the process
             metadata, including the return code.
         """
-        return jail_backend.value(workdir_path=self.workdir_path).run(args=args)
+        return jail_backend.value(
+            workdir_path=self.workdir_path, mount_specs=mount_specs
+        ).run(args=args)

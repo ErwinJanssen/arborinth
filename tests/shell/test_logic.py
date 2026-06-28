@@ -230,6 +230,15 @@ class TestNoneJail:
         with pytest.raises(FileNotFoundError, match="No shell binary available"):
             jail.build_command(args=None)
 
+    def test_mount_specs_ignored(self, tmp_path: pathlib.Path) -> None:
+        """`NoneJail` should ignore mount_specs."""
+        mount = MountSpec(mount_type=MountType.RO, source=None, dest=tmp_path / "dest")
+        jail = NoneJail(workdir_path=tmp_path, mount_specs=[mount])
+
+        result = jail.build_command(args=["echo", "test"])
+
+        assert result == ["echo", "test"]
+
 
 class TestJailBackend:
     """Tests for the `JailBackend` enum."""
@@ -325,6 +334,106 @@ class TestBubblewrapJail:
         assert "/proc" in result
         assert "--tmpfs" in result
         assert "/tmp" in result  # noqa: S108
+
+    @pytest.mark.parametrize(
+        ("mount", "expected"),
+        [
+            pytest.param(
+                MountSpec(
+                    mount_type=MountType.RO,
+                    source=pathlib.Path("/host/src"),
+                    dest=pathlib.Path("/sandbox/dest"),
+                ),
+                ["--ro-bind", "/host/src", "/sandbox/dest"],
+                id="ro-bind",
+            ),
+            pytest.param(
+                MountSpec(
+                    mount_type=MountType.RW,
+                    source=pathlib.Path("/host/src"),
+                    dest=pathlib.Path("/sandbox/dest"),
+                ),
+                ["--bind", "/host/src", "/sandbox/dest"],
+                id="rw-bind",
+            ),
+            pytest.param(
+                MountSpec(
+                    mount_type=MountType.TMPFS,
+                    source=None,
+                    dest=pathlib.Path("/sandbox/tmp"),
+                ),
+                ["--tmpfs", "/sandbox/tmp"],
+                id="tmpfs",
+            ),
+            pytest.param(
+                MountSpec(
+                    mount_type=MountType.DEV,
+                    source=None,
+                    dest=pathlib.Path("/sandbox/dev"),
+                ),
+                ["--dev", "/sandbox/dev"],
+                id="dev",
+            ),
+            pytest.param(
+                MountSpec(
+                    mount_type=MountType.PROC,
+                    source=None,
+                    dest=pathlib.Path("/sandbox/proc"),
+                ),
+                ["--proc", "/sandbox/proc"],
+                id="proc",
+            ),
+            pytest.param(
+                MountSpec(
+                    mount_type=MountType.RO, source=None, dest=pathlib.Path("/dest")
+                ),
+                ["--ro-bind", "/dest", "/dest"],
+                id="ro-bind-same-path",
+            ),
+        ],
+    )
+    def test_mount_to_bwrap_args(self, mount: MountSpec, expected: list[str]) -> None:
+        """`BubblewrapJail._mount_to_bwrap_args` should convert each mount type."""
+        assert BubblewrapJail._mount_to_bwrap_args(mount) == expected
+
+    def test_build_command_includes_mount_specs(self, tmp_path: pathlib.Path) -> None:
+        """`BubblewrapJail.build_command` should include mount_specs in output."""
+        mount = MountSpec(
+            mount_type=MountType.RO,
+            source=pathlib.Path("/host/src"),
+            dest=pathlib.Path("/sandbox/dest"),
+        )
+        jail = BubblewrapJail(workdir_path=tmp_path, mount_specs=[mount])
+        result = jail.build_command(args=["echo", "test"])
+
+        assert "--ro-bind" in result
+        assert "/host/src" in result
+        assert "/sandbox/dest" in result
+
+    def test_build_command_includes_multiple_mount_specs(
+        self, tmp_path: pathlib.Path
+    ) -> None:
+        """`BubblewrapJail.build_command` should include multiple mounts."""
+        mounts = [
+            MountSpec(
+                mount_type=MountType.RO,
+                source=pathlib.Path("/ro/src"),
+                dest=pathlib.Path("/ro/dest"),
+            ),
+            MountSpec(
+                mount_type=MountType.TMPFS,
+                source=None,
+                dest=pathlib.Path("/mnt/tmpfs-dest"),
+            ),
+        ]
+        jail = BubblewrapJail(workdir_path=tmp_path, mount_specs=mounts)
+        result = jail.build_command(args=["echo", "test"])
+
+        assert "--ro-bind" in result
+        assert "/ro/src" in result
+        assert "/ro/dest" in result
+        assert "--tmpfs" in result
+        assert "/mnt/tmpfs-dest" in result
 
     def test_bwrap_not_available_raises(
         self, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
