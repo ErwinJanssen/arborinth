@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import typing
+from unittest.mock import patch
 
 from arborinth.cli import main
 
@@ -157,3 +158,113 @@ class TestShellCommand:
             )
             assert result.exit_code != 0
             assert "Invalid mount spec" in result.output
+
+    def test_shell_preset_option_in_help(
+        self, cli_runner: click.testing.CliRunner
+    ) -> None:
+        """`--help` should show --preset option."""
+        result = cli_runner.invoke(main, ["shell", "--help"])
+        assert result.exit_code == 0
+        assert "--preset" in result.stdout
+
+    def test_shell_with_valid_preset(
+        self, cli_runner: click.testing.CliRunner, tmp_workspace: Workspace
+    ) -> None:
+        """`--preset` with a valid preset name should work."""
+        repo_root_path = tmp_workspace.project.repo_root_path
+        with cli_runner.isolated_filesystem(temp_dir=repo_root_path):
+            result = cli_runner.invoke(
+                main,
+                [
+                    "shell",
+                    tmp_workspace.name,
+                    "--preset",
+                    "opencode",
+                    "echo",
+                    "test",
+                ],
+            )
+            assert result.exit_code == 0
+
+    def test_shell_with_invalid_preset(
+        self, cli_runner: click.testing.CliRunner, tmp_workspace: Workspace
+    ) -> None:
+        """`--preset` with unknown name should show clear error."""
+        repo_root_path = tmp_workspace.project.repo_root_path
+        with cli_runner.isolated_filesystem(temp_dir=repo_root_path):
+            result = cli_runner.invoke(
+                main,
+                [
+                    "shell",
+                    tmp_workspace.name,
+                    "--preset",
+                    "nonexistent",
+                    "echo",
+                    "test",
+                ],
+            )
+            assert result.exit_code != 0
+            assert "Unknown preset" in result.output
+
+    def test_shell_with_multiple_presets(
+        self, cli_runner: click.testing.CliRunner, tmp_workspace: Workspace
+    ) -> None:
+        """Multiple `--preset` options should all be accepted."""
+        repo_root_path = tmp_workspace.project.repo_root_path
+        with cli_runner.isolated_filesystem(temp_dir=repo_root_path):
+            result = cli_runner.invoke(
+                main,
+                [
+                    "shell",
+                    tmp_workspace.name,
+                    "--preset",
+                    "opencode",
+                    "--preset",
+                    "opencode",
+                    "echo",
+                    "test",
+                ],
+            )
+            assert result.exit_code == 0
+
+    def test_shell_preset_command_takes_precedence(
+        self, cli_runner: click.testing.CliRunner, tmp_workspace: Workspace
+    ) -> None:
+        """`--preset` with explicit command should use command, not preset default."""
+        repo_root_path = tmp_workspace.project.repo_root_path
+        with cli_runner.isolated_filesystem(temp_dir=repo_root_path):
+            result = cli_runner.invoke(
+                main,
+                [
+                    "shell",
+                    tmp_workspace.name,
+                    "--preset",
+                    "opencode",
+                    "echo",
+                    "override",
+                ],
+            )
+            assert result.exit_code == 0
+
+    def test_shell_preset_default_command_used_when_no_args(
+        self, cli_runner: click.testing.CliRunner, tmp_workspace: Workspace
+    ) -> None:
+        """`--preset` should inject the preset's default command when no args given."""
+        repo_root_path = tmp_workspace.project.repo_root_path
+        with (
+            cli_runner.isolated_filesystem(temp_dir=repo_root_path),
+            patch("arborinth.workspace.logic.Workspace.shell") as mock_shell,
+        ):
+            mock_shell.return_value = type("Proc", (), {"returncode": 0})()
+            cli_runner.invoke(
+                main,
+                [
+                    "shell",
+                    tmp_workspace.name,
+                    "--preset",
+                    "opencode",
+                ],
+            )
+            mock_shell.assert_called_once()
+            _call_args, _call_kwargs = mock_shell.call_args
+            assert _call_kwargs.get("args") == ("opencode",)
