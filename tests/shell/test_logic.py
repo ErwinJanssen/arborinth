@@ -18,88 +18,101 @@ from arborinth.shell import (
     NoneJail,
 )
 
-if typing.TYPE_CHECKING:
-    import pathlib
-
 
 class TestMountSpec:
     """Tests for the `MountSpec` dataclass."""
 
-    def test_from_spec_ro_bind_same_path(self, tmp_path: pathlib.Path) -> None:
-        """`MountSpec.from_spec` should parse ro:dest correctly."""
-        dest = tmp_path / "dest"
-        spec = f"ro:{dest}"
-        mount = MountSpec.from_spec(spec)
+    @pytest.mark.parametrize(
+        ("spec", "expected"),
+        [
+            pytest.param(
+                "ro:/dest",
+                MountSpec(
+                    mount_type=MountType.RO, source=None, dest=pathlib.Path("/dest")
+                ),
+                id="ro-bind-same-path",
+            ),
+            pytest.param(
+                "rw:/dest",
+                MountSpec(
+                    mount_type=MountType.RW, source=None, dest=pathlib.Path("/dest")
+                ),
+                id="rw-bind-same-path",
+            ),
+            pytest.param(
+                "ro:/source:/dest",
+                MountSpec(
+                    mount_type=MountType.RO,
+                    source=pathlib.Path("/source"),
+                    dest=pathlib.Path("/dest"),
+                ),
+                id="ro-bind-different-paths",
+            ),
+            pytest.param(
+                "rw:/source:/dest",
+                MountSpec(
+                    mount_type=MountType.RW,
+                    source=pathlib.Path("/source"),
+                    dest=pathlib.Path("/dest"),
+                ),
+                id="rw-bind-different-paths",
+            ),
+            pytest.param(
+                "tmpfs:/dest",
+                MountSpec(
+                    mount_type=MountType.TMPFS, source=None, dest=pathlib.Path("/dest")
+                ),
+                id="tmpfs",
+            ),
+            pytest.param(
+                "dev:/dev",
+                MountSpec(
+                    mount_type=MountType.DEV, source=None, dest=pathlib.Path("/dev")
+                ),
+                id="dev",
+            ),
+            pytest.param(
+                "proc:/proc",
+                MountSpec(
+                    mount_type=MountType.PROC, source=None, dest=pathlib.Path("/proc")
+                ),
+                id="proc",
+            ),
+        ],
+    )
+    def test_from_spec_valid(self, spec: str, expected: MountSpec) -> None:
+        """`MountSpec.from_spec` should parse valid specs correctly."""
+        assert MountSpec.from_spec(spec) == expected
 
-        assert mount.mount_type == MountType.RO
-        assert mount.source is None
-        assert mount.dest == dest
-
-    def test_from_spec_rw_bind_same_path(self, tmp_path: pathlib.Path) -> None:
-        """`MountSpec.from_spec` should parse rw:source correctly."""
-        dest = tmp_path / "dest"
-        spec = f"rw:{dest}"
-        mount = MountSpec.from_spec(spec)
-
-        assert mount.mount_type == MountType.RW
-        assert mount.source is None
-        assert mount.dest == dest
-
-    def test_from_spec_ro_bind_different_paths(self, tmp_path: pathlib.Path) -> None:
-        """`MountSpec.from_spec` should parse ro:source:dest correctly."""
-        source = tmp_path / "source"
-        dest = tmp_path / "dest"
-        spec = f"ro:{source}:{dest}"
-        mount = MountSpec.from_spec(spec)
-
-        assert mount.mount_type == MountType.RO
-        assert mount.source == source
-        assert mount.dest == dest
-
-    def test_from_spec_tmpfs(self, tmp_path: pathlib.Path) -> None:
-        """`MountSpec.from_spec` should parse tmpfs:dest correctly."""
-        dest = tmp_path / "tmpfs_dest"
-        spec = f"tmpfs:{dest}"
-        mount = MountSpec.from_spec(spec)
-
-        assert mount.mount_type == MountType.TMPFS
-        assert mount.source is None
-        assert mount.dest == dest
-
-    def test_from_spec_dev(self, tmp_path: pathlib.Path) -> None:
-        """`MountSpec.from_spec` should parse dev:dest correctly."""
-        dest = tmp_path / "dev_dest"
-        spec = f"dev:{dest}"
-        mount = MountSpec.from_spec(spec)
-
-        assert mount.mount_type == MountType.DEV
-        assert mount.source is None
-        assert mount.dest == dest
-
-    def test_from_spec_proc(self, tmp_path: pathlib.Path) -> None:
-        """`MountSpec.from_spec` should parse proc:dest correctly."""
-        dest = tmp_path / "proc_dest"
-        spec = f"proc:{dest}"
-        mount = MountSpec.from_spec(spec)
-
-        assert mount.mount_type == MountType.PROC
-        assert mount.source is None
-        assert mount.dest == dest
-
-    def test_from_spec_invalid_type(self) -> None:
-        """`MountSpec.from_spec` should raise ValueError for invalid type."""
-        with pytest.raises(ValueError, match="Invalid mount type"):
-            MountSpec.from_spec("invalid:/path")
-
-    def test_from_spec_invalid_format(self) -> None:
-        """`MountSpec.from_spec` should raise ValueError for invalid format."""
-        with pytest.raises(ValueError, match="Invalid mount spec, too few parts"):
-            MountSpec.from_spec("ro")
-
-    def test_from_spec_three_parts_invalid_type(self) -> None:
-        """`MountSpec.from_spec` should raise ValueError for unsupported source."""
-        with pytest.raises(ValueError, match="only supports a destination"):
-            MountSpec.from_spec("tmpfs:/source:/dest")
+    @pytest.mark.parametrize(
+        ("spec", "match"),
+        [
+            pytest.param(
+                "invalid:/path",
+                "Invalid mount type",
+                id="invalid-mount-type",
+            ),
+            pytest.param(
+                "ro",
+                "Invalid mount spec, too few parts",
+                id="too-few-parts",
+            ),
+            pytest.param(
+                "ro:a:b:c",
+                "Invalid mount spec, too many parts",
+                id="too-many-parts",
+            ),
+            pytest.param(
+                "tmpfs:/source:/dest",
+                "only supports a destination",
+                id="source-not-allowed-for-type",
+            ),
+        ],
+    )
+    def test_from_spec_invalid(self, spec: str, match: str) -> None:
+        """`MountSpec.from_spec` should raise ValueError for invalid specs."""
+        with pytest.raises(ValueError, match=match):
+            MountSpec.from_spec(spec)
 
 
 class TestNoneJail:
