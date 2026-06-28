@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import pathlib
 import shutil
 import subprocess
@@ -16,6 +17,7 @@ from arborinth.shell import (
     MountSpec,
     MountType,
     NoneJail,
+    default_mount_specs,
 )
 
 
@@ -270,6 +272,67 @@ class TestJailBackend:
         assert instance.workdir_path == tmp_path
 
 
+class TestDefaultMountSpecs:
+    """Tests for the `default_mount_specs` function."""
+
+    def test_root_is_ro(self) -> None:
+        """`default_mount_specs` should include a read-only root mount."""
+        result = default_mount_specs(workdir_path=pathlib.Path("/tmp/work"))  # noqa: S108
+        assert (
+            MountSpec(
+                mount_type=MountType.RO,
+                source=pathlib.Path("/"),
+                dest=pathlib.Path("/"),
+            )
+            in result
+        )
+
+    def test_home_is_tmpfs(self) -> None:
+        """`default_mount_specs` should hide HOME behind a tmpfs."""
+        home = pathlib.Path(os.environ.get("HOME", "/root")).resolve()
+        result = default_mount_specs(workdir_path=pathlib.Path("/tmp/work"))  # noqa: S108
+        assert MountSpec(mount_type=MountType.TMPFS, source=None, dest=home) in result
+
+    def test_workdir_is_rw(self) -> None:
+        """`default_mount_specs` should include a read-write workdir mount."""
+        workdir = pathlib.Path("/tmp/my-workdir")  # noqa: S108
+        result = default_mount_specs(workdir_path=workdir)
+        assert (
+            MountSpec(
+                mount_type=MountType.RW,
+                source=workdir.resolve(),
+                dest=workdir.resolve(),
+            )
+            in result
+        )
+
+    def test_dev_proc_tmp_present(self) -> None:
+        """`default_mount_specs` should include /dev, /proc, and /tmp."""
+        result = default_mount_specs(workdir_path=pathlib.Path("/tmp/work"))  # noqa: S108
+        specs = {(m.mount_type, m.source, m.dest) for m in result}
+        assert (MountType.DEV, None, pathlib.Path("/dev")) in specs
+        assert (MountType.PROC, None, pathlib.Path("/proc")) in specs
+        assert (MountType.TMPFS, None, pathlib.Path("/tmp")) in specs  # noqa: S108
+
+    def test_path_entries_under_home_are_binded(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """`default_mount_specs` should bind PATH entries under HOME."""
+        tmp_home = pathlib.Path("/tmp/test_home")  # noqa: S108
+        bind_dir = tmp_home / ".local"
+        bind_dir.mkdir(parents=True, exist_ok=True)
+        (bind_dir / "bin").mkdir(parents=True, exist_ok=True)
+
+        monkeypatch.setenv("HOME", str(tmp_home))
+        monkeypatch.setenv("PATH", f"{bind_dir}/bin:/usr/bin")
+
+        result = default_mount_specs(workdir_path=pathlib.Path("/tmp/work"))  # noqa: S108
+
+        assert (
+            MountSpec(mount_type=MountType.RO, source=bind_dir, dest=bind_dir) in result
+        )
+
+
 class TestBubblewrapJail:
     """Tests for the `BubblewrapJail` class."""
 
@@ -289,9 +352,9 @@ class TestBubblewrapJail:
         assert result[0] == "bwrap"
         # Check that --unshare-all is present
         assert "--unshare-all" in result
-        # Check that workdir is bound read-write
-        assert "--bind" in result
-        assert str(tmp_path) in result
+        # Check that --chdir and workdir are present
+        assert "--chdir" in result
+        assert str(tmp_path.resolve()) in result
         # Check that -- separates bwrap options from command
         assert "--" in result
         # Check that the command comes after --
@@ -314,26 +377,6 @@ class TestBubblewrapJail:
         assert "--" in result
         # Check that default shell comes after --
         assert result[result.index("--") + 1] == "/bin/sh"
-
-    def test_build_command_includes_essential_mounts(
-        self, tmp_path: pathlib.Path
-    ) -> None:
-        """`BubblewrapJail.build_command` should include essential filesystem mounts."""
-        jail = BubblewrapJail(workdir_path=tmp_path)
-
-        result = jail.build_command(args=["echo", "test"])
-
-        # Check for essential mounts
-        assert "--chdir" in result
-        assert str(tmp_path.resolve()) in result
-        assert "--ro-bind" in result
-        assert "/" in result
-        assert "--dev" in result
-        assert "/dev" in result
-        assert "--proc" in result
-        assert "/proc" in result
-        assert "--tmpfs" in result
-        assert "/tmp" in result  # noqa: S108
 
     @pytest.mark.parametrize(
         ("mount", "expected"),
@@ -465,6 +508,12 @@ class TestBubblewrapJailIntegration:
         if shutil.which("bwrap") is None:
             pytest.skip("bubblewrap not installed")
 
+    @pytest.fixture
+    def jail_with_defaults(self, tmp_path: pathlib.Path) -> BubblewrapJail:
+        """Create a BubblewrapJail pre-configured with default secure mounts."""
+        mounts = default_mount_specs(workdir_path=tmp_path)
+        return BubblewrapJail(workdir_path=tmp_path, mount_specs=mounts)
+
     @pytest.mark.parametrize(
         "args",
         [
@@ -473,43 +522,40 @@ class TestBubblewrapJailIntegration:
         ],
     )
     def test_cannot_write_to_readonly_paths(
-        self, args: list[str], tmp_path: pathlib.Path
+        self, args: list[str], jail_with_defaults: BubblewrapJail
     ) -> None:
         """Writing to readonly paths should fail."""
-        jail = BubblewrapJail(workdir_path=tmp_path)
-        result = jail.run(args=args)
+        result = jail_with_defaults.run(args=args)
         assert result.returncode != 0
 
-    def test_can_write_to_workdir(self, tmp_path: pathlib.Path) -> None:
+    def test_can_write_to_workdir(
+        self, jail_with_defaults: BubblewrapJail, tmp_path: pathlib.Path
+    ) -> None:
         """Writing to the workdir should succeed (it's read-write)."""
-        jail = BubblewrapJail(workdir_path=tmp_path)
         test_file = tmp_path / "test_write_ok"
-        result = jail.run(args=["touch", str(test_file)])
+        result = jail_with_defaults.run(args=["touch", str(test_file)])
         assert result.returncode == 0
         assert test_file.exists()
 
-    def test_can_read_host_filesystem(self, tmp_path: pathlib.Path) -> None:
+    def test_can_read_host_filesystem(self, jail_with_defaults: BubblewrapJail) -> None:
         """Host filesystem should be readable through the read-only bind."""
-        jail = BubblewrapJail(workdir_path=tmp_path)
-        result = jail.run(args=["cat", "/etc/os-release"])
+        result = jail_with_defaults.run(args=["cat", "/etc/os-release"])
         assert result.returncode == 0
 
-    def test_tmp_is_tmpfs(self, tmp_path: pathlib.Path) -> None:
+    def test_tmp_is_tmpfs(self, jail_with_defaults: BubblewrapJail) -> None:
         """Verify /tmp is a fresh tmpfs mount inside the sandbox."""
-        jail = BubblewrapJail(workdir_path=tmp_path)
         # Write to /tmp in the sandbox
-        result = jail.run(args=["touch", "/tmp/test_in_sandbox"])  # noqa: S108
+        result = jail_with_defaults.run(args=["touch", "/tmp/test_in_sandbox"])  # noqa: S108
         assert result.returncode == 0
         # /tmp is a tmpfs, so the file exists inside the sandbox
         # We can't easily verify it's isolated from the host /tmp without
         # checking mount info, but the command succeeding confirms /tmp is writable
 
-    def test_proc_isolation(self, tmp_path: pathlib.Path) -> None:
+    def test_proc_isolation(self, jail_with_defaults: BubblewrapJail) -> None:
         """Verify PID namespace isolation via /proc."""
-        jail = BubblewrapJail(workdir_path=tmp_path)
         # In an isolated PID namespace, /proc/1 should be the init process of
         # the sandbox, which should be a bwrap process.
-        result = jail.run(
+        result = jail_with_defaults.run(
             # `grep [b]wrap` to avoid matching the grep process itself
             args=["bash", "-c", "cat /proc/1/cmdline | grep --text [b]wrap"]
         )

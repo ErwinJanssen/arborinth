@@ -9,6 +9,7 @@ from __future__ import annotations
 import abc
 import dataclasses
 import enum
+import os
 import pathlib
 import subprocess
 import typing
@@ -124,6 +125,81 @@ class MountSpec:
             source=source_path,
             dest=destination_path,
         )
+
+
+def default_mount_specs(workdir_path: pathlib.Path) -> list[MountSpec]:
+    """Build the default secure mount list for a bubblewrap jail.
+
+    This provides a sensible set of mounts for sandboxed execution:
+    - Read-only access to the entire root filesystem (binaries, libraries)
+    - Private /dev, /proc, and /tmp
+    - $HOME hidden behind an empty tmpfs to protect secrets
+    - PATH entries under $HOME selectively re-exposed as read-only
+    - The working directory mounted read-write
+
+    Args:
+        workdir_path: The working directory that should be read-write.
+
+    Returns:
+        A list of MountSpec objects with sensible security defaults.
+    """
+    home_raw = os.environ.get("HOME")
+    home = (
+        pathlib.Path(home_raw).resolve() if home_raw else pathlib.Path.home().resolve()
+    )
+
+    seen_dests: set[pathlib.Path] = set()
+
+    def add(mount: MountSpec) -> None:
+        if mount.dest not in seen_dests:
+            seen_dests.add(mount.dest)
+            mounts.append(mount)
+
+    mounts: list[MountSpec] = []
+
+    # Read-only access to system binaries and libraries
+    add(
+        MountSpec(
+            mount_type=MountType.RO, source=pathlib.Path("/"), dest=pathlib.Path("/")
+        )
+    )
+    # Private device nodes and process filesystem
+    add(MountSpec(mount_type=MountType.DEV, source=None, dest=pathlib.Path("/dev")))
+    add(MountSpec(mount_type=MountType.PROC, source=None, dest=pathlib.Path("/proc")))
+    # Fresh temporary space
+    add(MountSpec(mount_type=MountType.TMPFS, source=None, dest=pathlib.Path("/tmp")))  # noqa: S108
+    # Hide secrets in $HOME
+    add(MountSpec(mount_type=MountType.TMPFS, source=None, dest=home))
+
+    # Re-expose PATH entries that live under HOME
+    path_env = os.environ.get("PATH", "")
+    for entry in path_env.split(":"):
+        if not entry:
+            continue
+        entry_path = pathlib.Path(entry)
+        try:
+            entry_path.resolve().relative_to(home)
+        except ValueError:
+            continue  # Not under HOME, already visible via root ro-bind
+        if not entry_path.exists():
+            continue
+        # Walk up to the first ancestor directly under HOME so that
+        # sibling directories (e.g. lib/) are also accessible.
+        resolved = entry_path.resolve()
+        relative = resolved.relative_to(home)
+        parent = home.joinpath(relative.parts[0])
+        if parent.exists():
+            add(MountSpec(mount_type=MountType.RO, source=parent, dest=parent))
+
+    # Working directory as read-write
+    workdir_resolved = workdir_path.resolve()
+    add(
+        MountSpec(
+            mount_type=MountType.RW, source=workdir_resolved, dest=workdir_resolved
+        )
+    )
+
+    return mounts
 
 
 @dataclasses.dataclass(frozen=True, kw_only=True)
@@ -268,12 +344,11 @@ class BubblewrapJail(Jail):
     """A jail that uses bubblewrap (bwrap) for sandboxing.
 
     This jail uses bubblewrap to provide a sandboxed environment with controlled
-    filesystem access. It binds the entire host filesystem read-only by default,
-    which means the sandboxed process can read any file on the host system.
-    Only the working directory is bound read-write.
+    filesystem access. The mount_specs passed to this jail determine which paths
+    are accessible. Use `default_mount_specs()` for a sensible security baseline.
 
     Security note: This provides isolation but NOT security. A malicious process
-    can still read sensitive files from the host.
+    can still read sensitive files if they are exposed through mount_specs.
 
     Requires bubblewrap (bwrap) to be installed and available in PATH.
     """
@@ -325,25 +400,9 @@ class BubblewrapJail(Jail):
             # Set working directory inside the sandbox
             "--chdir",
             workdir_str,
-            # Bind the root filesystem read-only
-            "--ro-bind",
-            "/",
-            "/",
-            # Provide private /dev and /proc
-            "--dev",
-            "/dev",
-            "--proc",
-            "/proc",
-            # Provide a fresh /tmp
-            "--tmpfs",
-            "/tmp",  # noqa: S108
-            # Bind the working directory read-write
-            "--bind",
-            workdir_str,
-            workdir_str,
         ]
 
-        # Add user-specified mounts after the defaults
+        # Add mounts from mount_specs
         for mount in self.mount_specs:
             bwrap_args.extend(self._mount_to_bwrap_args(mount))
 

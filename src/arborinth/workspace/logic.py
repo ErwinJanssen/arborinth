@@ -14,7 +14,7 @@ import subprocess
 import typing
 
 from arborinth import _util
-from arborinth.shell import JailBackend, MountSpec
+from arborinth.shell import JailBackend, MountSpec, MountType, default_mount_specs
 
 if typing.TYPE_CHECKING:
     import pathlib
@@ -198,11 +198,23 @@ class Workspace:
                 shell.
             jail_backend: The jail backend to use.
             mount_specs: Additional mount specifications to pass to the jail.
+                These are merged after the defaults, allowing overrides.
 
         Returns:
             A `subprocess.CompletedProcess` object containing the process
             metadata, including the return code.
         """
+        mounts = list(default_mount_specs(workdir_path=self.workdir_path))
+
+        # Expose the .git directory read-only for git operations
+        git_dir = self.project.repo_root_path / ".git"
+        if git_dir.exists():
+            mounts.append(
+                MountSpec(mount_type=MountType.RO, source=git_dir, dest=git_dir)
+            )
+
+        mounts.extend(mount_specs)
+
         return jail_backend.value(
-            workdir_path=self.workdir_path, mount_specs=mount_specs
+            workdir_path=self.workdir_path, mount_specs=mounts
         ).run(args=args)
