@@ -44,6 +44,16 @@ BUILTIN_PRESETS: dict[str, Preset] = {
                 source=_HOME / ".cache" / "opencode",
                 dest=_HOME / ".cache" / "opencode",
             ),
+            MountSpec(
+                mount_type=MountType.RW,
+                source=_HOME / ".local" / "share" / "opencode",
+                dest=_HOME / ".local" / "share" / "opencode",
+            ),
+            MountSpec(
+                mount_type=MountType.RW,
+                source=_HOME / ".local" / "state" / "opencode",
+                dest=_HOME / ".local" / "state" / "opencode",
+            ),
         ),
     ),
 }

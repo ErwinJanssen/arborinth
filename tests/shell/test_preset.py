@@ -107,6 +107,28 @@ class TestPresetRegistry:
         )
         assert cache_mount in p.mount_specs
 
+    def test_get_preset_has_data_mount(self) -> None:
+        """The ``opencode`` preset should mount local share data as read-write."""
+        p = get_preset("opencode")
+        home = pathlib.Path.home()
+        data_mount = MountSpec(
+            mount_type=MountType.RW,
+            source=home / ".local" / "share" / "opencode",
+            dest=home / ".local" / "share" / "opencode",
+        )
+        assert data_mount in p.mount_specs
+
+    def test_get_preset_has_state_mount(self) -> None:
+        """The ``opencode`` preset should mount local state as read-write."""
+        p = get_preset("opencode")
+        home = pathlib.Path.home()
+        state_mount = MountSpec(
+            mount_type=MountType.RW,
+            source=home / ".local" / "state" / "opencode",
+            dest=home / ".local" / "state" / "opencode",
+        )
+        assert state_mount in p.mount_specs
+
     def test_get_unknown_preset_raises(self) -> None:
         """``get_preset()`` should raise ``KeyError`` for unknown presets."""
         try:
