@@ -96,3 +96,64 @@ class TestShellCommand:
                 ["shell", tmp_workspace.name],
             )
             assert result.exit_code == 0
+
+    def test_shell_mount_option_in_help(
+        self, cli_runner: click.testing.CliRunner
+    ) -> None:
+        """`--help` should show --mount option."""
+        result = cli_runner.invoke(main, ["shell", "--help"])
+        assert result.exit_code == 0
+        assert "--mount" in result.stdout
+
+    def test_shell_with_valid_mount(
+        self, cli_runner: click.testing.CliRunner, tmp_workspace: Workspace
+    ) -> None:
+        """`--mount` with a valid mount spec should work."""
+        repo_root_path = tmp_workspace.project.repo_root_path
+        with cli_runner.isolated_filesystem(temp_dir=repo_root_path):
+            result = cli_runner.invoke(
+                main,
+                [
+                    "shell",
+                    tmp_workspace.name,
+                    "--mount",
+                    "ro:/nonexistent",
+                    "echo",
+                    "test",
+                ],
+            )
+            assert result.exit_code == 0
+
+    def test_shell_with_multiple_mounts(
+        self, cli_runner: click.testing.CliRunner, tmp_workspace: Workspace
+    ) -> None:
+        """Multiple `--mount` options should all be accepted."""
+        repo_root_path = tmp_workspace.project.repo_root_path
+        with cli_runner.isolated_filesystem(temp_dir=repo_root_path):
+            result = cli_runner.invoke(
+                main,
+                [
+                    "shell",
+                    tmp_workspace.name,
+                    "--mount",
+                    "ro:/src1:/dest1",
+                    "--mount",
+                    "tmpfs:/tmp",
+                    "echo",
+                    "test",
+                ],
+            )
+            assert result.exit_code == 0
+
+    def test_shell_with_invalid_mount(
+        self, cli_runner: click.testing.CliRunner, tmp_workspace: Workspace
+    ) -> None:
+        """`--mount` with invalid spec should show clear error."""
+        repo_root_path = tmp_workspace.project.repo_root_path
+        with cli_runner.isolated_filesystem(temp_dir=repo_root_path):
+            result = cli_runner.invoke(
+                main,
+                ["shell", tmp_workspace.name, "--mount", "invalid", "echo", "test"],
+            )
+            assert result.exit_code != 0
+            assert "Invalid mount spec" in result.output

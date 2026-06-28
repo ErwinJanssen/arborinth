@@ -8,10 +8,28 @@ import typing
 
 import click
 
-from arborinth.shell import JailBackend
+from arborinth.shell import JailBackend, MountSpec
 
 if typing.TYPE_CHECKING:
     from arborinth import Project
+
+
+class MountSpecParamType(click.ParamType):
+    """Click parameter type for converting mount spec strings to MountSpec objects."""
+
+    name = "mountspec"
+
+    def convert(
+        self,
+        value: str,
+        param: click.Parameter | None,  # noqa: ARG002
+        ctx: click.Context | None,  # noqa: ARG002
+    ) -> MountSpec:
+        """Convert a mount spec string to a MountSpec object."""
+        try:
+            return MountSpec.from_spec(value)
+        except ValueError as exc:
+            self.fail(str(exc))
 
 
 @click.command()
@@ -27,12 +45,22 @@ if typing.TYPE_CHECKING:
     show_default=True,
     help="Jail backend to use for isolation.",
 )
+@click.option(
+    "--mount",
+    type=MountSpecParamType(),
+    multiple=True,
+    help=(
+        "Mount specification (e.g. ro:/src:/dest, tmpfs:/tmp)."
+        " Can be specified multiple times."
+    ),
+)
 @click.pass_context
 def shell(
     ctx: click.Context,
     workspace_name: str,
     args: tuple[str, ...],
     jail: JailBackend,
+    mount: tuple[MountSpec, ...],
 ) -> None:
     """Run a shell or command in a workspace.
 
@@ -59,7 +87,7 @@ def shell(
         raise click.ClickException(message) from exc
 
     try:
-        proc = workspace.shell(args=args or None, jail_backend=jail)
+        proc = workspace.shell(args=args or None, jail_backend=jail, mount_specs=mount)
     except FileNotFoundError as exc:
         message = str(exc)
         raise click.ClickException(message) from exc
