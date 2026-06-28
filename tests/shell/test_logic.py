@@ -28,14 +28,18 @@ class TestMountSpec:
             pytest.param(
                 "ro:/dest",
                 MountSpec(
-                    mount_type=MountType.RO, source=None, dest=pathlib.Path("/dest")
+                    mount_type=MountType.RO,
+                    source=None,
+                    dest=pathlib.Path("/dest"),
                 ),
                 id="ro-bind-same-path",
             ),
             pytest.param(
                 "rw:/dest",
                 MountSpec(
-                    mount_type=MountType.RW, source=None, dest=pathlib.Path("/dest")
+                    mount_type=MountType.RW,
+                    source=None,
+                    dest=pathlib.Path("/dest"),
                 ),
                 id="rw-bind-same-path",
             ),
@@ -60,21 +64,27 @@ class TestMountSpec:
             pytest.param(
                 "tmpfs:/dest",
                 MountSpec(
-                    mount_type=MountType.TMPFS, source=None, dest=pathlib.Path("/dest")
+                    mount_type=MountType.TMPFS,
+                    source=None,
+                    dest=pathlib.Path("/dest"),
                 ),
                 id="tmpfs",
             ),
             pytest.param(
                 "dev:/dev",
                 MountSpec(
-                    mount_type=MountType.DEV, source=None, dest=pathlib.Path("/dev")
+                    mount_type=MountType.DEV,
+                    source=None,
+                    dest=pathlib.Path("/dev"),
                 ),
                 id="dev",
             ),
             pytest.param(
                 "proc:/proc",
                 MountSpec(
-                    mount_type=MountType.PROC, source=None, dest=pathlib.Path("/proc")
+                    mount_type=MountType.PROC,
+                    source=None,
+                    dest=pathlib.Path("/proc"),
                 ),
                 id="proc",
             ),
@@ -224,26 +234,30 @@ class TestNoneJail:
 class TestJailBackend:
     """Tests for the `JailBackend` enum."""
 
-    def test_none_backend_returns_none_jail_class(self) -> None:
-        """`JailBackend.NONE.value` should return the `NoneJail` class."""
-        assert JailBackend.NONE.value is NoneJail
+    @pytest.mark.parametrize(
+        ("backend", "expected"),
+        [
+            pytest.param(JailBackend.NONE, NoneJail, id="none"),
+            pytest.param(JailBackend.BUBBLEWRAP, BubblewrapJail, id="bubblewrap"),
+        ],
+    )
+    def test_value(self, backend: JailBackend, expected: type[Jail]) -> None:
+        """`JailBackend.value` should return the correct jail class."""
+        assert backend.value is expected
 
-    def test_none_backend_instantiates_none_jail(self, tmp_path: pathlib.Path) -> None:
-        """`JailBackend.NONE.value()` should instantiate a `NoneJail`."""
-        instance = JailBackend.NONE.value(workdir_path=tmp_path)
-        assert isinstance(instance, NoneJail)
-        assert instance.workdir_path == tmp_path
-
-    def test_bubblewrap_backend_returns_bubblewrap_jail_class(self) -> None:
-        """`JailBackend.BUBBLEWRAP.value` should return the `BubblewrapJail` class."""
-        assert JailBackend.BUBBLEWRAP.value is BubblewrapJail
-
-    def test_bubblewrap_backend_instantiates_bubblewrap_jail(
-        self, tmp_path: pathlib.Path
+    @pytest.mark.parametrize(
+        ("backend", "expected"),
+        [
+            pytest.param(JailBackend.NONE, NoneJail, id="none"),
+            pytest.param(JailBackend.BUBBLEWRAP, BubblewrapJail, id="bubblewrap"),
+        ],
+    )
+    def test_instantiate(
+        self, backend: JailBackend, expected: type[Jail], tmp_path: pathlib.Path
     ) -> None:
-        """`JailBackend.BUBBLEWRAP.value()` should instantiate a `BubblewrapJail`."""
-        instance = JailBackend.BUBBLEWRAP.value(workdir_path=tmp_path)
-        assert isinstance(instance, BubblewrapJail)
+        """`JailBackend.value()` should instantiate the correct jail class."""
+        instance = backend.value(workdir_path=tmp_path)
+        assert isinstance(instance, expected)
         assert instance.workdir_path == tmp_path
 
 
