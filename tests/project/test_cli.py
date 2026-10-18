@@ -11,6 +11,7 @@ if typing.TYPE_CHECKING:
     import pathlib
 
     import click.testing
+    import pytest
 
 
 class TestProjectGroup:
@@ -41,16 +42,19 @@ class TestInfoCommand:
         assert "workspace root path" in result.stdout
 
     def test_info_default_workdir(
-        self, cli_runner: click.testing.CliRunner, tmp_git_repo: pathlib.Path
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        cli_runner: click.testing.CliRunner,
+        tmp_git_repo: pathlib.Path,
     ) -> None:
         """Info with default workdir should show project and workspace roots."""
-        with cli_runner.isolated_filesystem(temp_dir=tmp_git_repo):
-            result = cli_runner.invoke(main, ["project", "info"])
-            assert result.exit_code == 0
+        monkeypatch.chdir(tmp_git_repo)
+        result = cli_runner.invoke(main, ["project", "info"])
+        assert result.exit_code == 0
 
-            expected_workspace_root = tmp_git_repo / ".arborinth" / "workspaces"
-            assert f"project root: {tmp_git_repo}" in result.stdout
-            assert f"workspace root: {expected_workspace_root}" in result.stdout
+        expected_workspace_root = tmp_git_repo / ".arborinth" / "workspaces"
+        assert f"project root: {tmp_git_repo}" in result.stdout
+        assert f"workspace root: {expected_workspace_root}" in result.stdout
 
     def test_info_explicit_workdir(
         self, cli_runner: click.testing.CliRunner, tmp_git_repo: pathlib.Path
@@ -77,25 +81,31 @@ class TestInfoCommand:
         assert f"workspace root: {expected_workspace_root}" in result.stdout
 
     def test_info_json_format(
-        self, cli_runner: click.testing.CliRunner, tmp_git_repo: pathlib.Path
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        cli_runner: click.testing.CliRunner,
+        tmp_git_repo: pathlib.Path,
     ) -> None:
         """Info with --format json should output JSON."""
-        with cli_runner.isolated_filesystem(temp_dir=tmp_git_repo):
-            result = cli_runner.invoke(main, ["project", "info", "--format", "json"])
-            assert result.exit_code == 0
+        monkeypatch.chdir(tmp_git_repo)
+        result = cli_runner.invoke(main, ["project", "info", "--format", "json"])
+        assert result.exit_code == 0
 
-            parsed = json.loads(result.stdout)
-            assert "project_root" in parsed
-            assert "workspace_root" in parsed
-            assert parsed["project_root"] == str(tmp_git_repo)
+        parsed = json.loads(result.stdout)
+        assert "project_root" in parsed
+        assert "workspace_root" in parsed
+        assert parsed["project_root"] == str(tmp_git_repo)
 
     def test_info_json_format_short_flag(
-        self, cli_runner: click.testing.CliRunner, tmp_git_repo: pathlib.Path
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        cli_runner: click.testing.CliRunner,
+        tmp_git_repo: pathlib.Path,
     ) -> None:
         """Info with -f json should output JSON."""
-        with cli_runner.isolated_filesystem(temp_dir=tmp_git_repo):
-            result = cli_runner.invoke(main, ["project", "info", "-f", "json"])
-            assert result.exit_code == 0
+        monkeypatch.chdir(tmp_git_repo)
+        result = cli_runner.invoke(main, ["project", "info", "-f", "json"])
+        assert result.exit_code == 0
 
-            parsed = json.loads(result.stdout)
-            assert "project_root" in parsed
+        parsed = json.loads(result.stdout)
+        assert "project_root" in parsed

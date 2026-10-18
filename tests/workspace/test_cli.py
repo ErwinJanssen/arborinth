@@ -11,6 +11,7 @@ if typing.TYPE_CHECKING:
     import pathlib
 
     import click.testing
+    import pytest
 
 
 class TestWorkspaceGroup:
@@ -41,16 +42,19 @@ class TestCreateCommand:
         assert "NAME" in result.stdout
 
     def test_create_workspace(
-        self, cli_runner: click.testing.CliRunner, tmp_git_repo: pathlib.Path
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        cli_runner: click.testing.CliRunner,
+        tmp_git_repo: pathlib.Path,
     ) -> None:
         """Create command should create workspace directory."""
-        with cli_runner.isolated_filesystem(temp_dir=tmp_git_repo):
-            result = cli_runner.invoke(main, ["workspace", "create", "my_workspace"])
-            assert result.exit_code == 0
+        monkeypatch.chdir(tmp_git_repo)
+        result = cli_runner.invoke(main, ["workspace", "create", "my_workspace"])
+        assert result.exit_code == 0
 
-            expected_path = tmp_git_repo / ".arborinth" / "workspaces" / "my_workspace"
-            assert f"Created workspace: {expected_path}" in result.stdout
-            assert expected_path.is_dir()
+        expected_path = tmp_git_repo / ".arborinth" / "workspaces" / "my_workspace"
+        assert f"Created workspace: {expected_path}" in result.stdout
+        assert expected_path.is_dir()
 
     def test_create_workspace_explicit_workdir(
         self, cli_runner: click.testing.CliRunner, tmp_git_repo: pathlib.Path
@@ -80,22 +84,25 @@ class TestCreateCommand:
         assert expected_path.is_dir()
 
     def test_create_duplicate_workspace(
-        self, cli_runner: click.testing.CliRunner, tmp_git_repo: pathlib.Path
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        cli_runner: click.testing.CliRunner,
+        tmp_git_repo: pathlib.Path,
     ) -> None:
         """Create command with duplicate name should fail."""
-        with cli_runner.isolated_filesystem(temp_dir=tmp_git_repo):
-            # First creation should succeed
-            result1 = cli_runner.invoke(main, ["workspace", "create", "duplicate"])
-            assert result1.exit_code == 0
+        monkeypatch.chdir(tmp_git_repo)
+        # First creation should succeed
+        result1 = cli_runner.invoke(main, ["workspace", "create", "duplicate"])
+        assert result1.exit_code == 0
 
-            # Second creation with same name should fail
-            result2 = cli_runner.invoke(main, ["workspace", "create", "duplicate"])
-            assert result2.exit_code != 0
-            assert "Error:" in result2.output
-            assert (
-                "already exists" in result2.output.lower()
-                or "file exists" in result2.output.lower()
-            )
+        # Second creation with same name should fail
+        result2 = cli_runner.invoke(main, ["workspace", "create", "duplicate"])
+        assert result2.exit_code != 0
+        assert "Error:" in result2.output
+        assert (
+            "already exists" in result2.output.lower()
+            or "file exists" in result2.output.lower()
+        )
 
 
 class TestDeleteCommand:
@@ -109,20 +116,23 @@ class TestDeleteCommand:
         assert "NAME" in result.stdout
 
     def test_delete_workspace(
-        self, cli_runner: click.testing.CliRunner, tmp_git_repo: pathlib.Path
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        cli_runner: click.testing.CliRunner,
+        tmp_git_repo: pathlib.Path,
     ) -> None:
         """Delete command should remove the workspace directory."""
-        with cli_runner.isolated_filesystem(temp_dir=tmp_git_repo):
-            # Create a workspace first
-            cli_runner.invoke(main, ["workspace", "create", "delete_test"])
+        monkeypatch.chdir(tmp_git_repo)
+        # Create a workspace first
+        cli_runner.invoke(main, ["workspace", "create", "delete_test"])
 
-            result = cli_runner.invoke(main, ["workspace", "delete", "delete_test"])
-            assert result.exit_code == 0
-            assert "Deleted workspace: delete_test" in result.stdout
+        result = cli_runner.invoke(main, ["workspace", "delete", "delete_test"])
+        assert result.exit_code == 0
+        assert "Deleted workspace: delete_test" in result.stdout
 
-            # Verify it's actually deleted
-            expected_path = tmp_git_repo / ".arborinth" / "workspaces" / "delete_test"
-            assert not expected_path.exists()
+        # Verify it's actually deleted
+        expected_path = tmp_git_repo / ".arborinth" / "workspaces" / "delete_test"
+        assert not expected_path.exists()
 
     def test_delete_explicit_workdir(
         self, cli_runner: click.testing.CliRunner, tmp_git_repo: pathlib.Path
@@ -142,14 +152,17 @@ class TestDeleteCommand:
         assert "Deleted workspace: remote_delete" in result.stdout
 
     def test_delete_nonexistent_workspace(
-        self, cli_runner: click.testing.CliRunner, tmp_git_repo: pathlib.Path
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        cli_runner: click.testing.CliRunner,
+        tmp_git_repo: pathlib.Path,
     ) -> None:
         """Delete command with non-existent workspace should fail."""
-        with cli_runner.isolated_filesystem(temp_dir=tmp_git_repo):
-            result = cli_runner.invoke(main, ["workspace", "delete", "nonexistent"])
-            assert result.exit_code != 0
-            assert "Error:" in result.output
-            assert "does not exist" in result.output
+        monkeypatch.chdir(tmp_git_repo)
+        result = cli_runner.invoke(main, ["workspace", "delete", "nonexistent"])
+        assert result.exit_code != 0
+        assert "Error:" in result.output
+        assert "does not exist" in result.output
 
 
 class TestInfoCommand:
@@ -163,19 +176,22 @@ class TestInfoCommand:
         assert "NAME" in result.stdout
 
     def test_info_workspace(
-        self, cli_runner: click.testing.CliRunner, tmp_git_repo: pathlib.Path
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        cli_runner: click.testing.CliRunner,
+        tmp_git_repo: pathlib.Path,
     ) -> None:
         """Info command should display workspace information."""
-        with cli_runner.isolated_filesystem(temp_dir=tmp_git_repo):
-            # Create a workspace first
-            cli_runner.invoke(main, ["workspace", "create", "info_test"])
+        monkeypatch.chdir(tmp_git_repo)
+        # Create a workspace first
+        cli_runner.invoke(main, ["workspace", "create", "info_test"])
 
-            result = cli_runner.invoke(main, ["workspace", "info", "info_test"])
-            assert result.exit_code == 0
-            assert "workspace name: info_test" in result.stdout
-            assert "path:" in result.stdout
-            assert ".arborinth/workspaces/info_test" in result.stdout
-            assert "remote: arborinth/info_test" in result.stdout
+        result = cli_runner.invoke(main, ["workspace", "info", "info_test"])
+        assert result.exit_code == 0
+        assert "workspace name: info_test" in result.stdout
+        assert "path:" in result.stdout
+        assert ".arborinth/workspaces/info_test" in result.stdout
+        assert "remote: arborinth/info_test" in result.stdout
 
     def test_info_explicit_workdir(
         self, cli_runner: click.testing.CliRunner, tmp_git_repo: pathlib.Path
@@ -194,49 +210,58 @@ class TestInfoCommand:
         assert "path:" in result.stdout
 
     def test_info_nonexistent_workspace(
-        self, cli_runner: click.testing.CliRunner, tmp_git_repo: pathlib.Path
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        cli_runner: click.testing.CliRunner,
+        tmp_git_repo: pathlib.Path,
     ) -> None:
         """Info command with non-existent workspace should fail."""
-        with cli_runner.isolated_filesystem(temp_dir=tmp_git_repo):
-            result = cli_runner.invoke(main, ["workspace", "info", "nonexistent"])
-            assert result.exit_code != 0
-            assert "Error:" in result.output
-            assert "does not exist" in result.output
+        monkeypatch.chdir(tmp_git_repo)
+        result = cli_runner.invoke(main, ["workspace", "info", "nonexistent"])
+        assert result.exit_code != 0
+        assert "Error:" in result.output
+        assert "does not exist" in result.output
 
     def test_info_json_format(
-        self, cli_runner: click.testing.CliRunner, tmp_git_repo: pathlib.Path
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        cli_runner: click.testing.CliRunner,
+        tmp_git_repo: pathlib.Path,
     ) -> None:
         """Info with --format json should output JSON."""
-        with cli_runner.isolated_filesystem(temp_dir=tmp_git_repo):
-            # Create a workspace first
-            cli_runner.invoke(main, ["workspace", "create", "json_test"])
+        monkeypatch.chdir(tmp_git_repo)
+        # Create a workspace first
+        cli_runner.invoke(main, ["workspace", "create", "json_test"])
 
-            result = cli_runner.invoke(
-                main, ["workspace", "info", "json_test", "--format", "json"]
-            )
-            assert result.exit_code == 0
+        result = cli_runner.invoke(
+            main, ["workspace", "info", "json_test", "--format", "json"]
+        )
+        assert result.exit_code == 0
 
-            parsed = json.loads(result.stdout)
-            assert "workspace_name" in parsed
-            assert "path" in parsed
-            assert "remote" in parsed
-            assert parsed["workspace_name"] == "json_test"
+        parsed = json.loads(result.stdout)
+        assert "workspace_name" in parsed
+        assert "path" in parsed
+        assert "remote" in parsed
+        assert parsed["workspace_name"] == "json_test"
 
     def test_info_json_format_short_flag(
-        self, cli_runner: click.testing.CliRunner, tmp_git_repo: pathlib.Path
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        cli_runner: click.testing.CliRunner,
+        tmp_git_repo: pathlib.Path,
     ) -> None:
         """Info with -f json should output JSON."""
-        with cli_runner.isolated_filesystem(temp_dir=tmp_git_repo):
-            # Create a workspace first
-            cli_runner.invoke(main, ["workspace", "create", "json_test2"])
+        monkeypatch.chdir(tmp_git_repo)
+        # Create a workspace first
+        cli_runner.invoke(main, ["workspace", "create", "json_test2"])
 
-            result = cli_runner.invoke(
-                main, ["workspace", "info", "json_test2", "-f", "json"]
-            )
-            assert result.exit_code == 0
+        result = cli_runner.invoke(
+            main, ["workspace", "info", "json_test2", "-f", "json"]
+        )
+        assert result.exit_code == 0
 
-            parsed = json.loads(result.stdout)
-            assert "workspace_name" in parsed
+        parsed = json.loads(result.stdout)
+        assert "workspace_name" in parsed
 
 
 class TestListCommand:
@@ -249,27 +274,33 @@ class TestListCommand:
         assert "List workspaces for the project" in result.stdout
 
     def test_list_empty(
-        self, cli_runner: click.testing.CliRunner, tmp_git_repo: pathlib.Path
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        cli_runner: click.testing.CliRunner,
+        tmp_git_repo: pathlib.Path,
     ) -> None:
         """List command with no workspaces should show empty message."""
-        with cli_runner.isolated_filesystem(temp_dir=tmp_git_repo):
-            result = cli_runner.invoke(main, ["workspace", "list"])
-            assert result.exit_code == 0
-            assert not result.output
+        monkeypatch.chdir(tmp_git_repo)
+        result = cli_runner.invoke(main, ["workspace", "list"])
+        assert result.exit_code == 0
+        assert not result.output
 
     def test_list_workspaces(
-        self, cli_runner: click.testing.CliRunner, tmp_git_repo: pathlib.Path
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        cli_runner: click.testing.CliRunner,
+        tmp_git_repo: pathlib.Path,
     ) -> None:
         """List command should list existing workspaces."""
-        with cli_runner.isolated_filesystem(temp_dir=tmp_git_repo):
-            # Create some workspaces first
-            cli_runner.invoke(main, ["workspace", "create", "ws1"])
-            cli_runner.invoke(main, ["workspace", "create", "ws2"])
+        monkeypatch.chdir(tmp_git_repo)
+        # Create some workspaces first
+        cli_runner.invoke(main, ["workspace", "create", "ws1"])
+        cli_runner.invoke(main, ["workspace", "create", "ws2"])
 
-            result = cli_runner.invoke(main, ["workspace", "list"])
-            assert result.exit_code == 0
-            assert "ws1" in result.stdout
-            assert "ws2" in result.stdout
+        result = cli_runner.invoke(main, ["workspace", "list"])
+        assert result.exit_code == 0
+        assert "ws1" in result.stdout
+        assert "ws2" in result.stdout
 
     def test_list_explicit_workdir(
         self, cli_runner: click.testing.CliRunner, tmp_git_repo: pathlib.Path
