@@ -85,9 +85,26 @@ original repository or other workspaces.
 
 The shell module provides the ability to run shell sessions or commands inside
 workspaces. It uses a jail abstraction to control the execution environment.
-Currently, a `NoneJail` backend is available which runs commands directly on the
-host (without isolation) in the workspace's working directory. This is intended
-for convenience when you are certain the commands are safe.
+The following jail backends are available:
+
+- `none`: runs commands directly on the host (without isolation) in the
+  workspace's working directory. This is intended for convenience when you are
+  certain the commands are safe.
+- `bubblewrap`: runs commands in a [Bubblewrap](https://github.com/containers/bubblewrap)
+  sandbox. Mounts inside the sandbox can be configured with mount
+  specifications (see the `--mount` option below).
+
+The `bubblewrap` backend runs the command with all namespaces unshared, except
+the network, so the sandboxed process keeps network access. The entire host
+filesystem is mounted read-only, and only the workspace's working directory is
+mounted read-write. A process can therefore only modify files in its own working
+directory: accidental changes to any other file, on the host or in other
+workspaces, are impossible. At the same time, the process sees the same files,
+tool configurations and tools as on the host, so the environment stays
+convenient and familiar. A private `/dev` and `/proc` and a fresh tmpfs `/tmp`
+are provided. Mounts configured with `--mount` are applied after the defaults,
+in the order given, so a mount can override a default mount for the same
+destination.
 
 ## Usage
 
@@ -138,7 +155,26 @@ arborinth shell my_workspace echo "Hello, World!"
 
 # Run a command with flags in a workspace (note the `--` separator)
 arborinth shell my_workspace -- git branch --all
+
+# Run a command in a Bubblewrap sandbox
+arborinth shell my_workspace --jail bubblewrap echo "Hello, World!"
+
+# Run a command with mounts inside the sandbox
+arborinth shell my_workspace --jail bubblewrap --mount rw:/home/user/data:/data -- git branch --all
 ```
+
+Mount specifications given to `--mount` have the form `TYPE:dest` or
+`TYPE:source:dest`, where `TYPE` is one of:
+
+- `ro`: read-only bind mount
+- `rw`: read-write bind mount
+- `tmpfs`: in-memory filesystem mount
+- `dev`: device filesystem mount (usually `/dev`)
+- `proc`: procfs mount (usually `/proc`)
+
+For `ro` and `rw`, the source path can be omitted, in which case the destination
+path is used as the source. The `tmpfs`, `dev` and `proc` types only take a
+destination path.
 
 ### Python API
 
@@ -146,7 +182,7 @@ Both `Project` and `Workspace` classes can be used programmatically:
 
 ```python
 from arborinth import Project
-from arborinth.shell import JailBackend
+from arborinth.shell import JailBackend, MountSpec
 
 # Create a project with the current working directory
 project = Project()
@@ -171,6 +207,17 @@ ws = project.workspace("my_workspace")
 # Run a shell or command in a workspace
 result = ws.shell(args=["echo", "hello"], jail_backend=JailBackend.NONE)
 print(f"Exit code: {result.returncode}")
+
+# Run a command in a Bubblewrap sandbox
+result = ws.shell(args=["git", "branch"], jail_backend=JailBackend.BUBBLEWRAP)
+
+# Run a command with additional mounts in the sandbox
+mounts = [MountSpec.from_spec("rw:/home/user/data:/data")]
+result = ws.shell(
+    args=["git", "branch"],
+    jail_backend=JailBackend.BUBBLEWRAP,
+    mount_specs=mounts,
+)
 
 # Delete a workspace
 ws.delete()
