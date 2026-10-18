@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## v0.2.0 - 2026-10-18
+
+This release adds the `bubblewrap` jail backend, providing increased isolation
+for commands run in workspaces.
+
+### Added
+
+- `bubblewrap` jail backend for running commands in a sandboxed environment
+  using Bubblewrap. This can be selected with the `--jail=bubblewrap` CLI
+  option.
+- `MountSpec` and `MountType` classes for configuring mounts in jail
+  backends.
+- `shell --mount` CLI option to configure mounts.
+
+### Known Limitations
+
+- The `bubblewrap` backend is a thin layer of filesystem isolation: a sandboxed
+  process can only modify files in its workspace's working directory, while
+  still being able to read any file on the host and reach the network. It
+  protects against accidental modification, not against malicious processes.
+
 ## v0.1.0 - 2026-06-16
 
 This is the initial release of Arborinth. It provides basic functionality for
