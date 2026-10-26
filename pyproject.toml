@@ -46,6 +46,9 @@ dev = [
 # item.
 number = true
 
+# Wrap lines at 80 characters.
+wrap = 80
+
 [tool.ruff.lint]
 # Enable all rules by default
 select = ["ALL"]

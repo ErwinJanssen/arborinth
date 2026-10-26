@@ -71,8 +71,8 @@ run shell sessions or commands inside workspaces.
 
 ### Project
 
-A project represents a top-level Arborinth entity, typically associated with
-a Git repository. It serves as the central entry point for Arborinth operations.
+A project represents a top-level Arborinth entity, typically associated with a
+Git repository. It serves as the central entry point for Arborinth operations.
 
 ### Workspace
 
@@ -84,15 +84,16 @@ original repository or other workspaces.
 ### Shell
 
 The shell module provides the ability to run shell sessions or commands inside
-workspaces. It uses a jail abstraction to control the execution environment.
-The following jail backends are available:
+workspaces. It uses a jail abstraction to control the execution environment. The
+following jail backends are available:
 
 - `none`: runs commands directly on the host (without isolation) in the
   workspace's working directory. This is intended for convenience when you are
   certain the commands are safe.
-- `bubblewrap`: runs commands in a [Bubblewrap](https://github.com/containers/bubblewrap)
-  sandbox. Mounts inside the sandbox can be configured with mount
-  specifications (see the `--mount` option below).
+- `bubblewrap`: runs commands in a
+  [Bubblewrap](https://github.com/containers/bubblewrap) sandbox. Mounts inside
+  the sandbox can be configured with mount specifications (see the `--mount`
+  option below).
 
 The `bubblewrap` backend runs the command with all namespaces unshared, except
 the network, so the sandboxed process keeps network access. The entire host
@@ -225,8 +226,8 @@ ws.delete()
 
 The `Project` class validates that the working directory exists and is within a
 Git repository. Workspace names are validated to prevent path traversal attacks
-and other security issues. The `shell` method uses a jail backend to control
-the execution environment.
+and other security issues. The `shell` method uses a jail backend to control the
+execution environment.
 
 ## Development
 

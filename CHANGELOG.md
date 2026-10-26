@@ -3,7 +3,8 @@
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+and this project adheres to
+[Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## v0.2.0 - 2026-10-18
 
@@ -15,8 +16,7 @@ for commands run in workspaces.
 - `bubblewrap` jail backend for running commands in a sandboxed environment
   using Bubblewrap. This can be selected with the `--jail=bubblewrap` CLI
   option.
-- `MountSpec` and `MountType` classes for configuring mounts in jail
-  backends.
+- `MountSpec` and `MountType` classes for configuring mounts in jail backends.
 - `shell --mount` CLI option to configure mounts.
 
 ### Known Limitations
