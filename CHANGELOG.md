@@ -13,6 +13,10 @@ and this project adheres to
 - Workspaces now have a scratch directory (the `tmp` subdirectory, next to
   `workdir`), exposed as `Workspace.tmp_path`. It is created on demand when a
   shell is run and can be safely deleted at any time.
+- Workspaces now have a cache directory (the `cache` subdirectory, next to
+  `workdir`), exposed as `Workspace.cache_path`. Like the scratch directory, it
+  is created on demand when a shell is run and can be safely deleted at any
+  time.
 
 ### Changed
 

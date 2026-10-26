@@ -84,6 +84,18 @@ class Workspace:
         return self.root_path / "tmp"
 
     @property
+    def cache_path(self) -> pathlib.Path:
+        """Path to the cache directory within this workspace.
+
+        The cache directory holds disposable cached data (e.g. package manager
+        caches) for commands run in this workspace.
+
+        Returns:
+            The absolute path to the workspace's cache directory.
+        """
+        return self.root_path / "cache"
+
+    @property
     def remote_name(self) -> str:
         """Name of the remote in the original repository.
 
@@ -207,7 +219,8 @@ class Workspace:
         not captured, allowing for interactive use.
 
         The workspace's scratch directory (`tmp_path`) is created if it does not
-        exist and passed to the jail.
+        exist and passed to the jail. The cache directory (`cache_path`) is
+        created as well.
 
         Args:
             args: The command and arguments to run. If `None`, runs the default
@@ -221,6 +234,9 @@ class Workspace:
         """
         # The scratch directory is created on demand.
         self.tmp_path.mkdir(exist_ok=True)
+
+        # The cache directory is created on demand.
+        self.cache_path.mkdir(exist_ok=True)
 
         return jail_backend.value(
             workdir_path=self.workdir_path,

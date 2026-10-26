@@ -71,6 +71,14 @@ class TestWorkspacePaths:
         expected = tmp_project.workspace_root_path / "test" / "tmp"
         assert workspace.tmp_path == expected
 
+    def test_cache_path(self, tmp_project: Project) -> None:
+        """`cache_path` should return correct path to cache subdirectory."""
+        tmp_project.create_workspace("test")
+        workspace = tmp_project.workspace("test")
+
+        expected = tmp_project.workspace_root_path / "test" / "cache"
+        assert workspace.cache_path == expected
+
 
 class TestInfo:
     """Tests for the `info` property."""
@@ -215,6 +223,15 @@ class TestWorkspaceShell:
 
         assert proc.returncode == 0
         assert tmp_workspace.tmp_path.is_dir()
+
+    def test_shell_creates_cache_dir_on_demand(self, tmp_workspace: Workspace) -> None:
+        """`shell` should create the workspace cache directory if it is missing."""
+        assert not tmp_workspace.cache_path.exists()
+
+        proc = tmp_workspace.shell(args=["true"])
+
+        assert proc.returncode == 0
+        assert tmp_workspace.cache_path.is_dir()
 
     def test_shell_binds_tmp_dir_at_tmp(
         self, tmp_workspace: Workspace, monkeypatch: pytest.MonkeyPatch
