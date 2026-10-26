@@ -71,6 +71,18 @@ class Workspace:
         return self.root_path / "workdir"
 
     @property
+    def tmp_path(self) -> pathlib.Path:
+        """Path to the tmp (scratch) directory within this workspace.
+
+        The scratch directory holds disposable data for commands run in this
+        workspace.
+
+        Returns:
+            The absolute path to the workspace's tmp directory.
+        """
+        return self.root_path / "tmp"
+
+    @property
     def remote_name(self) -> str:
         """Name of the remote in the original repository.
 
@@ -193,6 +205,9 @@ class Workspace:
         contains the cloned Git repository. The process's stdout and stderr are
         not captured, allowing for interactive use.
 
+        The workspace's scratch directory (`tmp_path`) is created if it does
+        not exist.
+
         Args:
             args: The command and arguments to run. If `None`, runs the default
                 shell.
@@ -203,6 +218,9 @@ class Workspace:
             A `subprocess.CompletedProcess` object containing the process
             metadata, including the return code.
         """
+        # The scratch directory is created on demand.
+        self.tmp_path.mkdir(exist_ok=True)
+
         return jail_backend.value(
             workdir_path=self.workdir_path, mount_specs=mount_specs
         ).run(args=args)

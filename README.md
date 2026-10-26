@@ -79,7 +79,9 @@ Git repository. It serves as the central entry point for Arborinth operations.
 A workspace is an isolated environment derived from a project's Git repository.
 Each workspace contains its own clone of the repository (in the `workdir`
 subdirectory) where untrusted code can perform operations without affecting the
-original repository or other workspaces.
+original repository or other workspaces. It also contains a scratch directory
+(in the `tmp` subdirectory), which holds disposable data and can be safely
+deleted at any time.
 
 ### Shell
 

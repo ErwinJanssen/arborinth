@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Added
+
+- Workspaces now have a scratch directory (the `tmp` subdirectory, next to
+  `workdir`), exposed as `Workspace.tmp_path`. It is created on demand when a
+  shell is run and can be safely deleted at any time.
+
 ## v0.2.0 - 2026-10-18
 
 This release adds the `bubblewrap` jail backend, providing increased isolation

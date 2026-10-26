@@ -63,6 +63,14 @@ class TestWorkspacePaths:
         expected = tmp_project.workspace_root_path / "test" / "workdir"
         assert workspace.workdir_path == expected
 
+    def test_tmp_path(self, tmp_project: Project) -> None:
+        """`tmp_path` should return correct path to tmp subdirectory."""
+        tmp_project.create_workspace("test")
+        workspace = tmp_project.workspace("test")
+
+        expected = tmp_project.workspace_root_path / "test" / "tmp"
+        assert workspace.tmp_path == expected
+
 
 class TestInfo:
     """Tests for the `info` property."""
@@ -193,3 +201,17 @@ class TestWorkspaceShell:
         )
         proc = tmp_workspace.shell(args=["echo", "test"], mount_specs=[mount])
         assert proc.returncode == 0
+
+    def test_shell_creates_tmp_dir_on_demand(self, tmp_workspace: Workspace) -> None:
+        """`shell` should create the workspace tmp directory if it is missing.
+
+        The tmp directory can be deleted at any time (e.g. by a `git clean`
+        in the original repository), so `shell` recreates it when it is
+        needed.
+        """
+        assert not tmp_workspace.tmp_path.exists()
+
+        proc = tmp_workspace.shell(args=["true"])
+
+        assert proc.returncode == 0
+        assert tmp_workspace.tmp_path.is_dir()
