@@ -9,6 +9,7 @@ from __future__ import annotations
 import abc
 import dataclasses
 import enum
+import os
 import pathlib
 import subprocess
 import typing
@@ -138,11 +139,16 @@ class Jail(abc.ABC):
             mounts bind at `/tmp`. If `None`, the backend chooses its own
             default (e.g. an ephemeral tmpfs). The directory must exist when the
             jail is run.
+        cache_path: Path to a cache directory that jail backends that support
+            mounts bind at the user's cache directory (`XDG_CACHE_HOME`,
+            default `~/.cache`). If `None`, no such bind is made. The
+            directory must exist when the jail is run.
         mount_specs: Additional mount specifications for this jail.
     """
 
     workdir_path: pathlib.Path
     tmp_path: pathlib.Path | None = None
+    cache_path: pathlib.Path | None = None
     mount_specs: typing.Sequence[MountSpec] = ()
 
     def run(
@@ -209,8 +215,8 @@ class NoneJail(Jail):
     For example, when you want to perform git operations in another repository.
 
     Note:
-        `tmp_path` and `mount_specs` are accepted but ignored by this jail since
-        it does not use any sandboxing.
+        `tmp_path`, `cache_path` and `mount_specs` are accepted but ignored by
+        this jail since it does not use any sandboxing.
     """
 
     def run(
@@ -276,7 +282,9 @@ class BubblewrapJail(Jail):
     filesystem access. It binds the entire host filesystem read-only by default,
     which means the sandboxed process can read any file on the host system.
     Only the working directory is bound read-write. If `tmp_path` is set, that
-    directory is bound read-write at `/tmp`, otherwise a fresh tmpfs is used.
+    directory is bound read-write at `/tmp`, otherwise a fresh tmpfs is used. If
+    `cache_path` is set, that directory is bound read-write at the user's cache
+    directory.
 
     Security note: This provides isolation but NOT security. A malicious process
     can still read sensitive files from the host.
@@ -350,6 +358,16 @@ class BubblewrapJail(Jail):
             bwrap_args.extend(["--tmpfs", "/tmp"])  # noqa: S108
         else:
             bwrap_args.extend(["--bind", str(self.tmp_path), "/tmp"])  # noqa: S108
+
+        # Bind the cache directory at the user's cache directory: if
+        # `XDG_CACHE_HOME` is set, that directory is used, otherwise `~/.cache`.
+        # Like the `/tmp` mount, this is applied before the working directory
+        # bind so that it cannot shadow the working directory.
+        if self.cache_path is not None:
+            cache_dest = os.environ.get("XDG_CACHE_HOME") or str(
+                pathlib.Path.home() / ".cache"
+            )
+            bwrap_args.extend(["--bind", str(self.cache_path), cache_dest])
 
         bwrap_args.extend(
             [

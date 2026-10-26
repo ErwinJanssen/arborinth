@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import pathlib
 import shutil
 import subprocess
@@ -371,6 +372,47 @@ class TestBubblewrapJail:
 
         assert bind_index(scratch_bind) < bind_index(workdir_bind)
 
+    def test_build_command_with_cache_path_binds_cache(
+        self, tmp_path: pathlib.Path
+    ) -> None:
+        """A configured cache_path should be bound at the user's cache dir."""
+        cache = tmp_path / "cache"
+        jail = BubblewrapJail(workdir_path=tmp_path, cache_path=cache)
+
+        result = jail.build_command(args=["echo", "test"])
+
+        cache_dest = os.environ.get("XDG_CACHE_HOME") or str(
+            pathlib.Path.home() / ".cache"
+        )
+        cache_bind = ["--bind", str(cache), cache_dest]
+        assert any(result[i : i + 3] == cache_bind for i in range(len(result) - 2))
+
+    def test_build_command_cache_mount_precedes_workdir_bind(
+        self, tmp_path: pathlib.Path
+    ) -> None:
+        """The cache mount should be applied before the workdir bind.
+
+        Like the `/tmp` mount, a later mount could shadow the workdir bind if
+        the workdir is located under the cache directory.
+        """
+        cache = tmp_path / "cache"
+        jail = BubblewrapJail(workdir_path=tmp_path, cache_path=cache)
+
+        result = list(jail.build_command(args=["echo", "test"]))
+
+        workdir_str = str(tmp_path.resolve())
+        cache_dest = os.environ.get("XDG_CACHE_HOME") or str(
+            pathlib.Path.home() / ".cache"
+        )
+        cache_bind = ["--bind", str(cache), cache_dest]
+        workdir_bind = ["--bind", workdir_str, workdir_str]
+
+        def bind_index(bind: list[str]) -> int:
+            """Return the position of a three-element bind in the command."""
+            return next(i for i in range(len(result) - 2) if result[i : i + 3] == bind)
+
+        assert bind_index(cache_bind) < bind_index(workdir_bind)
+
     @pytest.mark.parametrize(
         ("mount", "expected"),
         [
@@ -559,6 +601,35 @@ class TestBubblewrapJailIntegration:
 
         write_result = jail.run(args=["touch", "/tmp/probe"])  # noqa: S108
         read_result = jail.run(args=["test", "-e", "/tmp/probe"])  # noqa: S108
+
+        assert write_result.returncode == 0
+        assert read_result.returncode == 0
+
+    def test_can_write_to_cache_path(self, tmp_path: pathlib.Path) -> None:
+        """With a cache_path configured, the user cache dir should be it."""
+        cache = tmp_path / "cache"
+        cache.mkdir()
+        jail = BubblewrapJail(workdir_path=tmp_path, cache_path=cache)
+
+        cache_dest = os.environ.get("XDG_CACHE_HOME") or str(
+            pathlib.Path.home() / ".cache"
+        )
+        result = jail.run(args=["touch", f"{cache_dest}/probe"])
+
+        assert result.returncode == 0
+        assert (cache / "probe").exists()
+
+    def test_cache_path_persists_across_runs(self, tmp_path: pathlib.Path) -> None:
+        """Cached data in cache_path should persist across jail invocations."""
+        cache = tmp_path / "cache"
+        cache.mkdir()
+        jail = BubblewrapJail(workdir_path=tmp_path, cache_path=cache)
+
+        cache_dest = os.environ.get("XDG_CACHE_HOME") or str(
+            pathlib.Path.home() / ".cache"
+        )
+        write_result = jail.run(args=["touch", f"{cache_dest}/probe"])
+        read_result = jail.run(args=["test", "-e", f"{cache_dest}/probe"])
 
         assert write_result.returncode == 0
         assert read_result.returncode == 0

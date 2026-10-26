@@ -88,7 +88,8 @@ class Workspace:
         """Path to the cache directory within this workspace.
 
         The cache directory holds disposable cached data (e.g. package manager
-        caches) for commands run in this workspace.
+        caches) for commands run in this workspace and is bound read-write at
+        the user's cache directory inside jail backends that support mounts.
 
         Returns:
             The absolute path to the workspace's cache directory.
@@ -218,9 +219,8 @@ class Workspace:
         contains the cloned Git repository. The process's stdout and stderr are
         not captured, allowing for interactive use.
 
-        The workspace's scratch directory (`tmp_path`) is created if it does not
-        exist and passed to the jail. The cache directory (`cache_path`) is
-        created as well.
+        The workspace's scratch directory (`tmp_path`) and cache directory
+        (`cache_path`) are created if they do not exist and passed to the jail.
 
         Args:
             args: The command and arguments to run. If `None`, runs the default
@@ -241,5 +241,6 @@ class Workspace:
         return jail_backend.value(
             workdir_path=self.workdir_path,
             tmp_path=self.tmp_path,
+            cache_path=self.cache_path,
             mount_specs=mount_specs,
         ).run(args=args)

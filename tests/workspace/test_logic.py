@@ -257,6 +257,33 @@ class TestWorkspaceShell:
         tmp_bind = ["--bind", str(tmp_workspace.tmp_path), "/tmp"]  # noqa: S108
         assert any(command[i : i + 3] == tmp_bind for i in range(len(command) - 2))
 
+    def test_shell_binds_cache_dir_in_jail(
+        self, tmp_workspace: Workspace, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """`shell` should pass the cache directory to the jail."""
+        captured: dict[str, typing.Any] = {}
+
+        def mock_run(
+            jail: BubblewrapJail,
+            args: typing.Sequence[str] | None = None,
+        ) -> subprocess.CompletedProcess:
+            """Mock `Jail.run` to capture the built jail command."""
+            captured["command"] = list(jail.build_command(args))
+            captured["cache_path"] = jail.cache_path
+            return subprocess.CompletedProcess(args=args, returncode=0)
+
+        monkeypatch.setattr(BubblewrapJail, "run", mock_run)
+
+        tmp_workspace.shell(args=["true"], jail_backend=JailBackend.BUBBLEWRAP)
+
+        command = captured["command"]
+        assert captured["cache_path"] == tmp_workspace.cache_path
+        cache_dest = os.environ.get("XDG_CACHE_HOME") or str(
+            pathlib.Path.home() / ".cache"
+        )
+        cache_bind = ["--bind", str(tmp_workspace.cache_path), cache_dest]
+        assert any(command[i : i + 3] == cache_bind for i in range(len(command) - 2))
+
 
 class TestWorkspaceShellJail:
     """Integration tests for `shell` with jail backends.
@@ -281,3 +308,18 @@ class TestWorkspaceShellJail:
         )
         assert proc.returncode == 0
         assert (tmp_workspace.tmp_path / probe).exists()
+
+    def test_shell_bubblewrap_writes_to_workspace_cache(
+        self, tmp_workspace: Workspace
+    ) -> None:
+        """The user cache dir in the jail should be the workspace cache dir."""
+        probe = generate_random_string()
+        cache_dest = os.environ.get("XDG_CACHE_HOME") or str(
+            pathlib.Path.home() / ".cache"
+        )
+        proc = tmp_workspace.shell(
+            args=["touch", f"{cache_dest}/{probe}"],
+            jail_backend=JailBackend.BUBBLEWRAP,
+        )
+        assert proc.returncode == 0
+        assert (tmp_workspace.cache_path / probe).exists()

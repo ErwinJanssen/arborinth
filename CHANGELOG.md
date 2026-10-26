@@ -24,6 +24,10 @@ and this project adheres to
   `/tmp`, instead of a fresh tmpfs. Scratch data now persists across invocations
   and can be inspected from the host. An ephemeral `/tmp` can still be requested
   with `--mount tmpfs:/tmp`.
+- The `bubblewrap` jail backend now binds the workspace's cache directory at the
+  user's cache directory (`XDG_CACHE_HOME`, defaulting to `~/.cache`) inside the
+  sandbox. Tools that cache data, such as package managers, now write to the
+  workspace instead of failing on the read-only host cache.
 
 ## v0.2.0 - 2026-10-18
 

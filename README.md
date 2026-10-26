@@ -109,9 +109,13 @@ tool configurations and tools as on the host, so the environment stays
 convenient and familiar. A private `/dev` and `/proc` are provided. The
 workspace's scratch directory (the `tmp` subdirectory) is mounted read-write at
 `/tmp`, so scratch data persists across invocations and can be inspected from
-the host. Mounts configured with `--mount` are applied after the defaults, in
-the order given, so a mount can override a default mount for the same
-destination (for example, `--mount tmpfs:/tmp` restores an ephemeral `/tmp`).
+the host. The workspace's cache directory (the `cache` subdirectory) is mounted
+read-write at the user's cache directory (`XDG_CACHE_HOME`, default `~/.cache`),
+so tools that cache data, such as package managers, write to the workspace
+instead of failing on the read-only host cache. Mounts configured with `--mount`
+are applied after the defaults, in the order given, so a mount can override a
+default mount for the same destination (for example, `--mount tmpfs:/tmp`
+restores an ephemeral `/tmp`).
 
 ## Usage
 
