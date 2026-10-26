@@ -14,6 +14,13 @@ and this project adheres to
   `workdir`), exposed as `Workspace.tmp_path`. It is created on demand when a
   shell is run and can be safely deleted at any time.
 
+### Changed
+
+- The `bubblewrap` jail backend now binds the workspace's scratch directory at
+  `/tmp`, instead of a fresh tmpfs. Scratch data now persists across invocations
+  and can be inspected from the host. An ephemeral `/tmp` can still be requested
+  with `--mount tmpfs:/tmp`.
+
 ## v0.2.0 - 2026-10-18
 
 This release adds the `bubblewrap` jail backend, providing increased isolation

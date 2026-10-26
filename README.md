@@ -80,8 +80,8 @@ A workspace is an isolated environment derived from a project's Git repository.
 Each workspace contains its own clone of the repository (in the `workdir`
 subdirectory) where untrusted code can perform operations without affecting the
 original repository or other workspaces. It also contains a scratch directory
-(in the `tmp` subdirectory), which holds disposable data and can be safely
-deleted at any time.
+(in the `tmp` subdirectory), mounted at `/tmp` inside jail backends that support
+mounts, which holds disposable data and can be safely deleted at any time.
 
 ### Shell
 
@@ -104,10 +104,12 @@ mounted read-write. A process can therefore only modify files in its own working
 directory: accidental changes to any other file, on the host or in other
 workspaces, are impossible. At the same time, the process sees the same files,
 tool configurations and tools as on the host, so the environment stays
-convenient and familiar. A private `/dev` and `/proc` and a fresh tmpfs `/tmp`
-are provided. Mounts configured with `--mount` are applied after the defaults,
-in the order given, so a mount can override a default mount for the same
-destination.
+convenient and familiar. A private `/dev` and `/proc` are provided. The
+workspace's scratch directory (the `tmp` subdirectory) is mounted read-write at
+`/tmp`, so scratch data persists across invocations and can be inspected from
+the host. Mounts configured with `--mount` are applied after the defaults, in
+the order given, so a mount can override a default mount for the same
+destination (for example, `--mount tmpfs:/tmp` restores an ephemeral `/tmp`).
 
 ## Usage
 

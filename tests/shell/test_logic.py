@@ -335,6 +335,42 @@ class TestBubblewrapJail:
         assert "--tmpfs" in result
         assert "/tmp" in result  # noqa: S108
 
+    def test_build_command_with_tmp_path_binds_scratch(
+        self, tmp_path: pathlib.Path
+    ) -> None:
+        """A configured tmp_path should be bound at `/tmp` instead of a tmpfs."""
+        scratch = tmp_path / "scratch"
+        jail = BubblewrapJail(workdir_path=tmp_path, tmp_path=scratch)
+
+        result = jail.build_command(args=["echo", "test"])
+
+        assert "--tmpfs" not in result
+        scratch_bind = ["--bind", str(scratch), "/tmp"]  # noqa: S108
+        assert any(result[i : i + 3] == scratch_bind for i in range(len(result) - 2))
+
+    def test_build_command_tmp_mount_precedes_workdir_bind(
+        self, tmp_path: pathlib.Path
+    ) -> None:
+        """The `/tmp` mount should be applied before the workdir bind.
+
+        If the workdir is located under `/tmp` on the host, a later `/tmp`
+        mount would shadow the workdir bind.
+        """
+        scratch = tmp_path / "scratch"
+        jail = BubblewrapJail(workdir_path=tmp_path, tmp_path=scratch)
+
+        result = list(jail.build_command(args=["echo", "test"]))
+
+        workdir_str = str(tmp_path.resolve())
+        scratch_bind = ["--bind", str(scratch), "/tmp"]  # noqa: S108
+        workdir_bind = ["--bind", workdir_str, workdir_str]
+
+        def bind_index(bind: list[str]) -> int:
+            """Return the position of a three-element bind in the command."""
+            return next(i for i in range(len(result) - 2) if result[i : i + 3] == bind)
+
+        assert bind_index(scratch_bind) < bind_index(workdir_bind)
+
     @pytest.mark.parametrize(
         ("mount", "expected"),
         [
@@ -503,6 +539,29 @@ class TestBubblewrapJailIntegration:
         # /tmp is a tmpfs, so the file exists inside the sandbox
         # We can't easily verify it's isolated from the host /tmp without
         # checking mount info, but the command succeeding confirms /tmp is writable
+
+    def test_can_write_to_tmp_path(self, tmp_path: pathlib.Path) -> None:
+        """With a tmp_path configured, `/tmp` should be that directory."""
+        scratch = tmp_path / "scratch"
+        scratch.mkdir()
+        jail = BubblewrapJail(workdir_path=tmp_path, tmp_path=scratch)
+
+        result = jail.run(args=["touch", "/tmp/probe"])  # noqa: S108
+
+        assert result.returncode == 0
+        assert (scratch / "probe").exists()
+
+    def test_tmp_path_persists_across_runs(self, tmp_path: pathlib.Path) -> None:
+        """Scratch data in tmp_path should persist across jail invocations."""
+        scratch = tmp_path / "scratch"
+        scratch.mkdir()
+        jail = BubblewrapJail(workdir_path=tmp_path, tmp_path=scratch)
+
+        write_result = jail.run(args=["touch", "/tmp/probe"])  # noqa: S108
+        read_result = jail.run(args=["test", "-e", "/tmp/probe"])  # noqa: S108
+
+        assert write_result.returncode == 0
+        assert read_result.returncode == 0
 
     def test_proc_isolation(self, tmp_path: pathlib.Path) -> None:
         """Verify PID namespace isolation via /proc."""

@@ -10,7 +10,7 @@ import typing
 
 import pytest
 
-from arborinth.shell import MountSpec, MountType
+from arborinth.shell import BubblewrapJail, JailBackend, MountSpec, MountType
 from arborinth.workspace import logic
 from tests import INVALID_WORKSPACE_NAME_INPUTS, generate_random_string
 
@@ -215,3 +215,52 @@ class TestWorkspaceShell:
 
         assert proc.returncode == 0
         assert tmp_workspace.tmp_path.is_dir()
+
+    def test_shell_binds_tmp_dir_at_tmp(
+        self, tmp_workspace: Workspace, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """`shell` should pass the tmp directory to the jail for `/tmp`."""
+        captured: dict[str, typing.Any] = {}
+
+        def mock_run(
+            jail: BubblewrapJail,
+            args: typing.Sequence[str] | None = None,
+        ) -> subprocess.CompletedProcess:
+            """Mock `Jail.run` to capture the built jail command."""
+            captured["command"] = list(jail.build_command(args))
+            captured["tmp_path"] = jail.tmp_path
+            return subprocess.CompletedProcess(args=args, returncode=0)
+
+        monkeypatch.setattr(BubblewrapJail, "run", mock_run)
+
+        tmp_workspace.shell(args=["true"], jail_backend=JailBackend.BUBBLEWRAP)
+
+        command = captured["command"]
+        assert captured["tmp_path"] == tmp_workspace.tmp_path
+        tmp_bind = ["--bind", str(tmp_workspace.tmp_path), "/tmp"]  # noqa: S108
+        assert any(command[i : i + 3] == tmp_bind for i in range(len(command) - 2))
+
+
+class TestWorkspaceShellJail:
+    """Integration tests for `shell` with jail backends.
+
+    These tests require external tools (e.g. bubblewrap) to be installed.
+    """
+
+    @pytest.fixture(autouse=True)
+    def skip_without_bwrap(self) -> None:
+        """Skip all tests in this class if bwrap is not installed."""
+        if shutil.which("bwrap") is None:
+            pytest.skip("bubblewrap not installed")
+
+    def test_shell_bubblewrap_writes_to_workspace_tmp(
+        self, tmp_workspace: Workspace
+    ) -> None:
+        """`/tmp` in the bubblewrap jail should be the workspace tmp dir."""
+        probe = generate_random_string()
+        proc = tmp_workspace.shell(
+            args=["touch", f"/tmp/{probe}"],  # noqa: S108
+            jail_backend=JailBackend.BUBBLEWRAP,
+        )
+        assert proc.returncode == 0
+        assert (tmp_workspace.tmp_path / probe).exists()

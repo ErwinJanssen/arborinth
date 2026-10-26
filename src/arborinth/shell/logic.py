@@ -134,10 +134,15 @@ class Jail(abc.ABC):
 
     Attributes:
         workdir_path: The directory to run commands in.
+        tmp_path: Path to a scratch directory that jail backends that support
+            mounts bind at `/tmp`. If `None`, the backend chooses its own
+            default (e.g. an ephemeral tmpfs). The directory must exist when the
+            jail is run.
         mount_specs: Additional mount specifications for this jail.
     """
 
     workdir_path: pathlib.Path
+    tmp_path: pathlib.Path | None = None
     mount_specs: typing.Sequence[MountSpec] = ()
 
     def run(
@@ -204,8 +209,8 @@ class NoneJail(Jail):
     For example, when you want to perform git operations in another repository.
 
     Note:
-        `mount_specs` are accepted but ignored by this jail since it does not
-        use any sandboxing.
+        `tmp_path` and `mount_specs` are accepted but ignored by this jail since
+        it does not use any sandboxing.
     """
 
     def run(
@@ -270,7 +275,8 @@ class BubblewrapJail(Jail):
     This jail uses bubblewrap to provide a sandboxed environment with controlled
     filesystem access. It binds the entire host filesystem read-only by default,
     which means the sandboxed process can read any file on the host system.
-    Only the working directory is bound read-write.
+    Only the working directory is bound read-write. If `tmp_path` is set, that
+    directory is bound read-write at `/tmp`, otherwise a fresh tmpfs is used.
 
     Security note: This provides isolation but NOT security. A malicious process
     can still read sensitive files from the host.
@@ -334,14 +340,25 @@ class BubblewrapJail(Jail):
             "/dev",
             "--proc",
             "/proc",
-            # Provide a fresh /tmp
-            "--tmpfs",
-            "/tmp",  # noqa: S108
-            # Bind the working directory read-write
-            "--bind",
-            workdir_str,
-            workdir_str,
         ]
+
+        # Mount `/tmp`: the scratch directory if one is configured, otherwise a
+        # fresh tmpfs. This is applied before the working directory bind below,
+        # so that the scratch directory cannot shadow the working directory if
+        # it happens to be located under `/tmp`.
+        if self.tmp_path is None:
+            bwrap_args.extend(["--tmpfs", "/tmp"])  # noqa: S108
+        else:
+            bwrap_args.extend(["--bind", str(self.tmp_path), "/tmp"])  # noqa: S108
+
+        bwrap_args.extend(
+            [
+                # Bind the working directory read-write
+                "--bind",
+                workdir_str,
+                workdir_str,
+            ]
+        )
 
         # Add user-specified mounts after the defaults
         for mount in self.mount_specs:

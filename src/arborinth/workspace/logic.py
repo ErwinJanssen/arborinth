@@ -75,7 +75,8 @@ class Workspace:
         """Path to the tmp (scratch) directory within this workspace.
 
         The scratch directory holds disposable data for commands run in this
-        workspace.
+        workspace and is mounted read-write at `/tmp` inside jail backends that
+        support mounts.
 
         Returns:
             The absolute path to the workspace's tmp directory.
@@ -205,8 +206,8 @@ class Workspace:
         contains the cloned Git repository. The process's stdout and stderr are
         not captured, allowing for interactive use.
 
-        The workspace's scratch directory (`tmp_path`) is created if it does
-        not exist.
+        The workspace's scratch directory (`tmp_path`) is created if it does not
+        exist and passed to the jail.
 
         Args:
             args: The command and arguments to run. If `None`, runs the default
@@ -222,5 +223,7 @@ class Workspace:
         self.tmp_path.mkdir(exist_ok=True)
 
         return jail_backend.value(
-            workdir_path=self.workdir_path, mount_specs=mount_specs
+            workdir_path=self.workdir_path,
+            tmp_path=self.tmp_path,
+            mount_specs=mount_specs,
         ).run(args=args)
