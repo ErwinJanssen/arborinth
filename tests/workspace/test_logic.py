@@ -213,9 +213,8 @@ class TestWorkspaceShell:
     def test_shell_creates_tmp_dir_on_demand(self, tmp_workspace: Workspace) -> None:
         """`shell` should create the workspace tmp directory if it is missing.
 
-        The tmp directory can be deleted at any time (e.g. by a `git clean`
-        in the original repository), so `shell` recreates it when it is
-        needed.
+        The tmp directory can be deleted at any time (e.g. by a `git clean` in
+        the original repository), so `shell` recreates it when it is needed.
         """
         assert not tmp_workspace.tmp_path.exists()
 

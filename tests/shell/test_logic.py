@@ -354,8 +354,8 @@ class TestBubblewrapJail:
     ) -> None:
         """The `/tmp` mount should be applied before the workdir bind.
 
-        If the workdir is located under `/tmp` on the host, a later `/tmp`
-        mount would shadow the workdir bind.
+        If the workdir is located under `/tmp` on the host, a later `/tmp` mount
+        would shadow the workdir bind.
         """
         scratch = tmp_path / "scratch"
         jail = BubblewrapJail(workdir_path=tmp_path, tmp_path=scratch)

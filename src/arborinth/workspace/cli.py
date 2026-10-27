@@ -1,6 +1,7 @@
 """CLI for Arborinth's `workspace` module.
 
-This module provides the command-line interface for workspace-related operations.
+This module provides the command-line interface for workspace-related
+operations.
 """
 
 import typing
@@ -17,8 +18,8 @@ if typing.TYPE_CHECKING:
 def workspace() -> None:
     """Manage Arborinth workspaces.
 
-    A workspace is an isolated clone of your repository where untrusted code
-    can perform operations without affecting the original repository.
+    A workspace is an isolated clone of your repository where untrusted code can
+    perform operations without affecting the original repository.
     """
 
 
@@ -60,8 +61,8 @@ def list_(ctx: click.Context) -> None:
 def info(ctx: click.Context, name: str, output_format: _util.InfoFormat) -> None:
     """Display information about a workspace.
 
-    Shows the workspace name, its root path, and the remote name in the
-    original repository.
+    Shows the workspace name, its root path, and the remote name in the original
+    repository.
     """
     try:
         project: Project = ctx.obj

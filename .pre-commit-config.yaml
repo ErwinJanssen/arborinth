@@ -26,3 +26,10 @@ repos:
 
           # Format Python code blocks with Ruff.
           - mdformat-ruff
+
+  - repo: https://github.com/PyCQA/docformatter
+    rev: v1.7.8
+    hooks:
+      - id: docformatter
+        additional_dependencies: [tomli]  # For parsing pyproject.toml
+        args: [--in-place]
