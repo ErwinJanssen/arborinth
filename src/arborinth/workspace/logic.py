@@ -9,6 +9,7 @@ repository.
 from __future__ import annotations
 
 import dataclasses
+import os
 import shutil
 import subprocess
 import typing
@@ -151,6 +152,42 @@ class Workspace:
             message = (
                 f"Cannot register remote '{self.remote_name}': "
                 f"Git is not installed or not found in PATH."
+            )
+            raise RuntimeError(message) from exc
+
+    def set_relative_origin_url(self) -> None:
+        """Set the clone's `origin` remote URL to a relative path.
+
+        Git stores the absolute path of the cloned repository as the clone's
+        `origin` URL. This replaces it with a path relative to the clone, so
+        that the workspace keeps working when the repository directory is
+        moved. Relative paths in remote URLs are resolved against the
+        repository root, so the URL works regardless of the directory a Git
+        command is run from.
+
+        Raises:
+            RuntimeError: If setting the URL fails.
+        """
+        relative = os.path.relpath(self.project.repo_root_path, self.workdir_path)
+
+        try:
+            subprocess.run(
+                [
+                    "git",
+                    "remote",
+                    "set-url",
+                    "origin",
+                    relative,
+                ],
+                cwd=self.workdir_path,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+        except subprocess.CalledProcessError as exc:
+            message = (
+                f"Failed to set the origin URL for workspace '{self.name}': "
+                f"{exc.stderr.strip() if exc.stderr else 'unknown error'}"
             )
             raise RuntimeError(message) from exc
 

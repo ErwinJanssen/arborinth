@@ -122,7 +122,9 @@ class Project:
         directory. The workspace is initialized by cloning the project's Git
         repository into the workspace's `workdir` subdirectory. The clone uses
         an isolated Git configuration to prevent the host system's Git config
-        from affecting the operation.
+        from affecting the operation. The clone's `origin` remote is set to a
+        relative path, so that the workspace keeps working when the repository
+        directory is moved.
 
         Also adds the workspace's clone as a remote in the original repository
         with the name `arborinth/<workspace_name>`, allowing the original repo
@@ -205,11 +207,14 @@ class Project:
         # Create the Workspace instance (directory exists, validation passes)
         workspace = Workspace(name=name, project=self)
 
-        # Register the workspace as a remote in the original repository
+        # Point the clone's origin remote at the original repository with a
+        # relative path, and register the workspace as a remote in the
+        # original repository.
         try:
+            workspace.set_relative_origin_url()
             workspace.register_as_remote()
         except RuntimeError:
-            # Clean up the workspace directory if adding remote failed
+            # Clean up the workspace directory if either step failed
             if workspace_path.exists():
                 shutil.rmtree(workspace_path)
             raise

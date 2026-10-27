@@ -1,6 +1,7 @@
 """Tests for the `project` logic module."""
 
 import pathlib
+import shutil
 import subprocess
 
 import pytest
@@ -213,6 +214,59 @@ class TestCreateWorkspace:
         # Check that the remote exists in the output
         assert remote_name in proc.stdout
         assert str(workspace.workdir_path) in proc.stdout
+
+    def test_create_workspace_sets_relative_origin_url(
+        self, tmp_project: logic.Project
+    ) -> None:
+        """`create_workspace` should set a relative origin URL in the clone."""
+        workspace = tmp_project.create_workspace("test_relative_origin")
+
+        proc = subprocess.run(
+            ["git", "remote", "get-url", "origin"],
+            cwd=workspace.workdir_path,
+            capture_output=True,
+            check=True,
+            text=True,
+        )
+
+        # Four levels up from the workdir is the repository root: the
+        # workspace directory, the workspaces directory, `.arborinth` and the
+        # repository root.
+        assert proc.stdout.strip() == "../../../.."
+
+    def test_create_workspace_fetch_works_after_repo_move(
+        self, tmp_path: pathlib.Path
+    ) -> None:
+        """The clone's `origin` should keep working after the repo is moved."""
+        repo_path = tmp_path / "repo"
+        repo_path.mkdir()
+        subprocess.run(["git", "init"], cwd=repo_path, check=True, capture_output=True)
+        project = logic.Project(workdir=repo_path)
+        workspace = project.create_workspace("test_move")
+        # Resolve the workdir path before moving: the workspace properties
+        # derive their paths from the original repository, which is gone
+        # after the move.
+        workdir_path = workspace.workdir_path
+
+        # Run `git fetch` from a subdirectory of the clone, to verify that the
+        # relative URL is resolved against the repository root and not against
+        # the current directory.
+        subdir_path = workdir_path / "sub"
+        subdir_path.mkdir()
+
+        moved_path = tmp_path / "moved"
+        shutil.move(repo_path, moved_path)
+        moved_workdir_path = moved_path / workdir_path.relative_to(repo_path)
+
+        proc = subprocess.run(
+            ["git", "fetch", "origin"],
+            cwd=moved_workdir_path / "sub",
+            capture_output=True,
+            check=False,
+            text=True,
+        )
+
+        assert proc.returncode == 0, proc.stderr
 
     def test_create_workspace_git_not_installed(
         self, monkeypatch: pytest.MonkeyPatch, tmp_project: logic.Project
