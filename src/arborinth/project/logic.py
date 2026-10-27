@@ -27,15 +27,21 @@ class Project:
     Attributes:
         workdir: The working directory path. Defaults to the current working
             directory. This should be within a Git repository.
+        repo_root_path: Root path of the project's Git repository. Resolved
+            once when the project is created, so that all paths derived from
+            it are consistent.
 
     Raises:
         ValueError: If `workdir` is not an existing directory.
+        RuntimeError: If `workdir` is not within a Git repository, or if Git
+            is not installed.
     """
 
     workdir: pathlib.Path = dataclasses.field(default_factory=pathlib.Path.cwd)
+    repo_root_path: pathlib.Path = dataclasses.field(init=False)
 
     def __post_init__(self) -> None:
-        """Validate the project attributes after initialization."""
+        """Validate the project attributes and resolve the repository root."""
         # Resolve `workdir` to an absolute path
         self.workdir = self.workdir.resolve()
         if not self.workdir.is_dir():
@@ -44,20 +50,8 @@ class Project:
             )
             raise ValueError(message)
 
-    @property
-    def repo_root_path(self) -> pathlib.Path:
-        """Root path of the Git repository for this project.
-
-        Uses the current working directory to determine the Git root by running
-        `git rev-parse --show-toplevel`.
-
-        Returns:
-            The absolute path to the Git repository root.
-
-        Raises:
-            RuntimeError: If `workdir` is not within a Git repository, or if
-                Git is not installed.
-        """
+        # Resolve the Git repository root once, so that all paths derived
+        # from it are consistent and no Git command is run per access.
         try:
             result = subprocess.run(
                 ["git", "rev-parse", "--show-toplevel"],
@@ -92,7 +86,7 @@ class Project:
                 )
             raise RuntimeError(message) from exc
 
-        return pathlib.Path(result.stdout.strip())
+        self.repo_root_path = pathlib.Path(result.stdout.strip())
 
     @property
     def workspace_root_path(self) -> pathlib.Path:

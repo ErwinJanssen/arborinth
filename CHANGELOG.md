@@ -20,6 +20,9 @@ and this project adheres to
 
 ### Changed
 
+- The `Project` class resolves the Git repository root once, when it is created,
+  instead of running `git rev-parse` on every access. Creating a `Project` now
+  fails immediately if the working directory is not inside a Git repository.
 - The clone's `origin` remote now points at the original repository with a
   relative path, so that workspaces keep working when the repository directory
   is moved.

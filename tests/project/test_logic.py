@@ -19,10 +19,10 @@ class TestProjectInit:
         project = logic.Project()
         assert project.workdir == pathlib.Path.cwd()
 
-    def test_explicit_workdir(self, tmp_path: pathlib.Path) -> None:
+    def test_explicit_workdir(self, tmp_git_repo: pathlib.Path) -> None:
         """`Project` with explicit workdir should use that path."""
-        project = logic.Project(workdir=tmp_path)
-        assert project.workdir == tmp_path
+        project = logic.Project(workdir=tmp_git_repo)
+        assert project.workdir == tmp_git_repo
 
     def test_nonexistent_workdir_raises(self) -> None:
         """`Project` with non-existent workdir should raise `ValueError`."""
@@ -39,7 +39,10 @@ class TestProjectInit:
 
 
 class TestRepoRootPath:
-    """Tests for the `repo_root_path` property."""
+    """Tests for resolving the Git repository root.
+
+    The repository root is resolved once, when the `Project` is created.
+    """
 
     def test_repo_root_in_git_repo(self, tmp_git_repo: pathlib.Path) -> None:
         """repo_root_path should return correct git root when in a repo."""
@@ -67,33 +70,43 @@ class TestRepoRootPath:
         # The root should be the git repo root
         assert root == tmp_git_repo
 
-    def test_repo_root_outside_git_repo_raises(self, tmp_path: pathlib.Path) -> None:
-        """repo_root_path should raise RuntimeError when not in a git repo."""
-        project = logic.Project(workdir=tmp_path)
+    def test_repo_root_resolved_once(
+        self, tmp_git_repo: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """repo_root_path should not run Git again after the project is created."""
+        project = logic.Project(workdir=tmp_git_repo)
 
+        def mock_run(*_args: object, **_kwargs: object) -> None:
+            message = "git should not be called after the project is created"
+            raise AssertionError(message)
+
+        monkeypatch.setattr(subprocess, "run", mock_run)
+
+        assert project.repo_root_path == tmp_git_repo
+
+    def test_repo_root_outside_git_repo_raises(self, tmp_path: pathlib.Path) -> None:
+        """`Project` creation should raise RuntimeError when not in a repo."""
         with pytest.raises(
             RuntimeError, match=r"Cannot determine Git root.*Git command failed"
         ):
-            _ = project.repo_root_path
+            logic.Project(workdir=tmp_path)
 
     def test_repo_root_with_mocked_git_failure(self, tmp_path: pathlib.Path) -> None:
-        """repo_root_path should raise RuntimeError when git command fails."""
+        """`Project` creation should raise when the git command fails."""
         # Create a directory with a .git file (simulating a corrupted repo)
         test_dir = tmp_path / "test"
         test_dir.mkdir()
         (test_dir / ".git").touch()
 
-        project = logic.Project(workdir=test_dir)
-
         with pytest.raises(
             RuntimeError, match=r"Git command failed.*a \.git entry exists"
         ):
-            _ = project.repo_root_path
+            logic.Project(workdir=test_dir)
 
     def test_repo_root_git_not_installed(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
     ) -> None:
-        """repo_root_path should raise RuntimeError when git is not installed."""
+        """`Project` creation should raise RuntimeError when git is missing."""
 
         # Mock subprocess.run to raise FileNotFoundError (git not found)
         def mock_run(*_args: object, **_kwargs: object) -> None:
@@ -102,12 +115,10 @@ class TestRepoRootPath:
 
         monkeypatch.setattr(subprocess, "run", mock_run)
 
-        project = logic.Project(workdir=tmp_path)
-
         with pytest.raises(
             RuntimeError, match=r"Cannot determine Git root.*Git is not installed"
         ):
-            _ = project.repo_root_path
+            logic.Project(workdir=tmp_path)
 
 
 class TestWorkspaceRootPath:
@@ -245,20 +256,16 @@ class TestCreateWorkspace:
         subprocess.run(["git", "init"], cwd=repo_path, check=True, capture_output=True)
         project = logic.Project(workdir=repo_path)
         workspace = project.create_workspace("test_move")
-        # Resolve the workdir path before moving: the workspace properties
-        # derive their paths from the original repository, which is gone
-        # after the move.
-        workdir_path = workspace.workdir_path
 
         # Run `git fetch` from a subdirectory of the clone, to verify that the
         # relative URL is resolved against the repository root and not against
         # the current directory.
-        subdir_path = workdir_path / "sub"
+        subdir_path = workspace.workdir_path / "sub"
         subdir_path.mkdir()
 
         moved_path = tmp_path / "moved"
         shutil.move(repo_path, moved_path)
-        moved_workdir_path = moved_path / workdir_path.relative_to(repo_path)
+        moved_workdir_path = moved_path / workspace.workdir_path.relative_to(repo_path)
 
         # The clone's `origin` is registered with a relative path.
         origin_proc = subprocess.run(
