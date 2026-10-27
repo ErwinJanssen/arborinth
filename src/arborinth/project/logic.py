@@ -134,10 +134,21 @@ class Project:
         Raises:
             ValueError: If the workspace name is invalid.
             FileExistsError: If a workspace with this name already exists.
-            RuntimeError: If the Git repository cannot be cloned or if adding
-                the remote fails.
+            RuntimeError: If Git is not installed, if the Git repository
+                cannot be cloned, or if adding the remote fails.
         """
         _util.validate_workspace_name(name)
+
+        # Git must be available for the clone. Check before any directories
+        # are created, so that a missing Git installation is not confused with
+        # other `FileNotFoundError`s raised by the clone, and so that no
+        # directories are left behind.
+        if shutil.which("git") is None:
+            message = (
+                f"Cannot clone repository for workspace '{name}': "
+                f"Git is not installed or not found in PATH."
+            )
+            raise RuntimeError(message)
 
         workspace_path = self.workspace_root_path / name
 
@@ -190,13 +201,12 @@ class Project:
             )
             raise RuntimeError(message) from exc
         except FileNotFoundError as exc:
-            # Clean up the directory if git is not found
+            # Clean up the directory if the clone failed. Git availability is
+            # checked upfront, so the error has another cause, such as a
+            # missing working directory.
             if workspace_path.exists():
                 shutil.rmtree(workspace_path)
-            message = (
-                f"Cannot clone repository for workspace '{name}': "
-                f"Git is not installed or not found in PATH."
-            )
+            message = f"Cannot clone repository for workspace '{name}': {exc}"
             raise RuntimeError(message) from exc
 
         # Create the Workspace instance (directory exists, validation passes)

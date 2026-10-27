@@ -292,15 +292,31 @@ class TestCreateWorkspace:
         self, monkeypatch: pytest.MonkeyPatch, tmp_project: logic.Project
     ) -> None:
         """`create_workspace` should raise RuntimeError when git is not installed."""
-
-        def mock_run(*_args: object, **_kwargs: object) -> None:
-            message = "git not found"
-            raise FileNotFoundError(message)
-
-        monkeypatch.setattr(subprocess, "run", mock_run)
+        monkeypatch.setattr(shutil, "which", lambda _name: None)
 
         with pytest.raises(RuntimeError, match="Git is not installed"):
             tmp_project.create_workspace("test_no_git")
+
+        # No directories are created when Git is missing
+        assert not tmp_project.workspace_root_path.exists()
+
+    def test_create_workspace_missing_workdir(self, tmp_git_repo: pathlib.Path) -> None:
+        """`create_workspace` should report the original error for a gone workdir.
+
+        Git availability is checked upfront, so a `FileNotFoundError` from the
+        clone has another cause. The workspace directory is cleaned up.
+        """
+        subdir = tmp_git_repo / "subdir"
+        subdir.mkdir()
+        project = logic.Project(workdir=subdir)
+        shutil.rmtree(subdir)
+
+        with pytest.raises(RuntimeError, match="No such file or directory"):
+            project.create_workspace("test_missing_workdir")
+
+        # The workspace directory is cleaned up on failure
+        workspace_path = project.workspace_root_path / "test_missing_workdir"
+        assert not workspace_path.exists()
 
     def test_create_workspace_clone_failure(
         self, monkeypatch: pytest.MonkeyPatch, tmp_project: logic.Project
