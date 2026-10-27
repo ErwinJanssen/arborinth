@@ -23,6 +23,10 @@ and this project adheres to
 - The `Project` class resolves the Git repository root once, when it is created,
   instead of running `git rev-parse` on every access. Creating a `Project` now
   fails immediately if the working directory is not inside a Git repository.
+- The `bubblewrap` jail backend now masks `/run` with a fresh tmpfs, so host
+  sockets, such as the ssh-agent and D-Bus, are no longer reachable from the
+  sandbox. The user's runtime directory and the resolver configuration are
+  preserved, so tools and DNS keep working.
 - The clone's `origin` remote now points at the original repository with a
   relative path, so that workspaces keep working when the repository directory
   is moved.

@@ -284,7 +284,8 @@ class BubblewrapJail(Jail):
     Only the working directory is bound read-write. If `tmp_path` is set, that
     directory is bound read-write at `/tmp`, otherwise a fresh tmpfs is used. If
     `cache_path` is set, that directory is bound read-write at the user's cache
-    directory.
+    directory. `/run` is masked with a fresh tmpfs, so that host sockets are
+    not reachable from the sandbox.
 
     Security note: This provides isolation but NOT security. A malicious process
     can still read sensitive files from the host.
@@ -315,6 +316,45 @@ class BubblewrapJail(Jail):
         if mount.mount_type == MountType.PROC:
             return ["--proc", str(mount.dest)]
         return []
+
+    @staticmethod
+    def _run_mask_args(
+        run: pathlib.Path = pathlib.Path("/run"),
+        resolv_conf: pathlib.Path = pathlib.Path("/etc/resolv.conf"),
+    ) -> list[str]:
+        """Return bwrap arguments that mask the given runtime directory.
+
+        The directory is replaced by a fresh tmpfs, so that files in it, such
+        as host socket files, are not reachable from the sandbox.
+
+        DNS is kept working when `resolv_conf` is a symlink into the masked
+        directory, as on systems using systemd-resolved: the file it points to
+        is bound read-only at its real location, so that the symlink inside the
+        sandbox still resolves.
+
+        Args:
+            run: The runtime directory to mask.
+            resolv_conf: The path of the resolver configuration.
+
+        Returns:
+            A list of bwrap arguments.
+        """
+        args = ["--tmpfs", str(run)]
+
+        # The runtime directory of the user usually points into the masked
+        # directory. Provide an empty one, because tools expect it to exist.
+        runtime_dir = os.environ.get("XDG_RUNTIME_DIR")
+        if runtime_dir is not None and pathlib.Path(runtime_dir).is_relative_to(run):
+            args.extend(["--tmpfs", runtime_dir])
+
+        # Keep DNS working when the resolver configuration is a symlink into
+        # the masked directory, as on systems using systemd-resolved.
+        if resolv_conf.is_symlink():
+            target = resolv_conf.resolve()
+            if target.is_relative_to(run):
+                args.extend(["--ro-bind", str(target), str(target)])
+
+        return args
 
     def build_command(
         self, args: typing.Sequence[str] | None = None
@@ -349,6 +389,10 @@ class BubblewrapJail(Jail):
             "--proc",
             "/proc",
         ]
+
+        # Mask `/run`, so that host sockets (such as the ssh-agent and D-Bus)
+        # are not reachable from the sandbox.
+        bwrap_args.extend(self._run_mask_args())
 
         # Mount `/tmp`: the scratch directory if one is configured, otherwise a
         # fresh tmpfs. This is applied before the working directory bind below,

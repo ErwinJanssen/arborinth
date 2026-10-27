@@ -279,6 +279,49 @@ class TestBubblewrapJail:
         jail = BubblewrapJail(workdir_path=tmp_path)
         assert isinstance(jail, Jail)
 
+    def test_build_command_masks_run(self, tmp_path: pathlib.Path) -> None:
+        """`build_command` should mask `/run` with a fresh tmpfs."""
+        jail = BubblewrapJail(workdir_path=tmp_path)
+
+        result = jail.build_command(args=["echo", "test"])
+
+        run_mask = ["--tmpfs", "/run"]
+        assert any(result[i : i + 2] == run_mask for i in range(len(result) - 1))
+
+    @pytest.mark.parametrize(
+        "runtime_dir",
+        [
+            pytest.param("/run/user/1000", id="under-run"),
+            pytest.param("/tmp/runtime", id="outside-run"),  # noqa: S108
+            pytest.param(None, id="unset"),
+        ],
+    )
+    def test_build_command_runtime_dir(
+        self,
+        tmp_path: pathlib.Path,
+        monkeypatch: pytest.MonkeyPatch,
+        runtime_dir: str | None,
+    ) -> None:
+        """A runtime dir under `/run` should be masked with its own tmpfs."""
+        if runtime_dir is None:
+            monkeypatch.delenv("XDG_RUNTIME_DIR", raising=False)
+        else:
+            monkeypatch.setenv("XDG_RUNTIME_DIR", runtime_dir)
+        jail = BubblewrapJail(workdir_path=tmp_path)
+
+        result = jail.build_command(args=["echo", "test"])
+
+        # A runtime dir under `/run` is hidden by the mask, so it gets an
+        # empty tmpfs of its own. A runtime dir outside `/run` is unaffected.
+        masked = runtime_dir is not None and pathlib.Path(runtime_dir).is_relative_to(
+            "/run"
+        )
+        has_runtime_mask = runtime_dir is not None and any(
+            result[i : i + 2] == ["--tmpfs", runtime_dir]
+            for i in range(len(result) - 1)
+        )
+        assert has_runtime_mask == masked
+
     def test_build_command_with_args(self, tmp_path: pathlib.Path) -> None:
         """`BubblewrapJail.build_command` should return a proper bwrap command."""
         jail = BubblewrapJail(workdir_path=tmp_path)
@@ -345,7 +388,11 @@ class TestBubblewrapJail:
 
         result = jail.build_command(args=["echo", "test"])
 
-        assert "--tmpfs" not in result
+        # `/tmp` is a bind mount, not a tmpfs
+        assert not any(
+            result[i : i + 2] == ["--tmpfs", "/tmp"]  # noqa: S108
+            for i in range(len(result) - 1)
+        )
         scratch_bind = ["--bind", str(scratch), "/tmp"]  # noqa: S108
         assert any(result[i : i + 3] == scratch_bind for i in range(len(result) - 2))
 
@@ -412,6 +459,78 @@ class TestBubblewrapJail:
             return next(i for i in range(len(result) - 2) if result[i : i + 3] == bind)
 
         assert bind_index(cache_bind) < bind_index(workdir_bind)
+
+
+class TestRunMaskArgs:
+    """Tests for the `_run_mask_args` static method."""
+
+    def test_masks_run(self, tmp_path: pathlib.Path) -> None:
+        """The masked directory should be replaced by a tmpfs."""
+        run = tmp_path / "run"
+        result = BubblewrapJail._run_mask_args(run, tmp_path / "resolv.conf")
+
+        assert result[:2] == ["--tmpfs", str(run)]
+
+    def test_runtime_dir_under_run_masked(
+        self, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A runtime dir under the masked dir should get its own tmpfs."""
+        run = tmp_path / "run"
+        runtime_dir = run / "user" / "1000"
+        monkeypatch.setenv("XDG_RUNTIME_DIR", str(runtime_dir))
+
+        result = BubblewrapJail._run_mask_args(run, tmp_path / "resolv.conf")
+
+        assert result[2:4] == ["--tmpfs", str(runtime_dir)]
+
+    def test_runtime_dir_outside_run_not_masked(
+        self, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A runtime dir outside the masked dir should not get a tmpfs."""
+        monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path / "runtime"))
+
+        result = BubblewrapJail._run_mask_args(
+            tmp_path / "run", tmp_path / "resolv.conf"
+        )
+
+        assert result[2:] == []
+
+    def test_resolv_conf_symlink_into_run_bound(self, tmp_path: pathlib.Path) -> None:
+        """A resolv.conf symlink into the masked dir should get a bind."""
+        run = tmp_path / "run"
+        resolve_dir = run / "systemd" / "resolve"
+        resolve_dir.mkdir(parents=True)
+        target = resolve_dir / "stub-resolv.conf"
+        target.touch()
+        resolv_conf = tmp_path / "resolv.conf"
+        resolv_conf.symlink_to(target)
+
+        result = BubblewrapJail._run_mask_args(run, resolv_conf)
+
+        assert result[-3:] == ["--ro-bind", str(target), str(target)]
+
+    def test_resolv_conf_regular_file_not_bound(self, tmp_path: pathlib.Path) -> None:
+        """A regular resolv.conf file is visible through the root bind."""
+        resolv_conf = tmp_path / "resolv.conf"
+        resolv_conf.touch()
+
+        result = BubblewrapJail._run_mask_args(tmp_path / "run", resolv_conf)
+
+        assert "--ro-bind" not in result
+
+    def test_resolv_conf_symlink_outside_run_not_bound(
+        self, tmp_path: pathlib.Path
+    ) -> None:
+        """A resolv.conf symlink outside the masked dir needs no bind."""
+        other = tmp_path / "other"
+        other.mkdir()
+        (other / "resolv.conf").touch()
+        resolv_conf = tmp_path / "resolv.conf"
+        resolv_conf.symlink_to(other / "resolv.conf")
+
+        result = BubblewrapJail._run_mask_args(tmp_path / "run", resolv_conf)
+
+        assert "--ro-bind" not in result
 
     @pytest.mark.parametrize(
         ("mount", "expected"),
@@ -633,6 +752,37 @@ class TestBubblewrapJailIntegration:
 
         assert write_result.returncode == 0
         assert read_result.returncode == 0
+
+    def test_run_host_socket_not_reachable(self, tmp_path: pathlib.Path) -> None:
+        """Host socket files in `/run` should not exist in the sandbox."""
+        ssh_auth_sock = os.environ.get("SSH_AUTH_SOCK")
+        if not ssh_auth_sock or not pathlib.Path(ssh_auth_sock).is_relative_to("/run"):
+            pytest.skip("no host socket file under /run")
+
+        jail = BubblewrapJail(workdir_path=tmp_path)
+        result = jail.run(args=["test", "-e", ssh_auth_sock])
+        assert result.returncode != 0
+
+    def test_run_resolv_conf_readable(self, tmp_path: pathlib.Path) -> None:
+        """The resolver configuration should stay readable with `/run` masked."""
+        if not pathlib.Path("/etc/resolv.conf").exists():
+            pytest.skip("no resolver configuration")
+
+        jail = BubblewrapJail(workdir_path=tmp_path)
+        result = jail.run(args=["cat", "/etc/resolv.conf"])
+        assert result.returncode == 0
+
+    def test_run_runtime_dir_exists_when_configured(
+        self, tmp_path: pathlib.Path
+    ) -> None:
+        """The runtime dir should exist in the sandbox when it is set."""
+        runtime_dir = os.environ.get("XDG_RUNTIME_DIR")
+        if not runtime_dir or not pathlib.Path(runtime_dir).is_relative_to("/run"):
+            pytest.skip("no runtime dir under /run")
+
+        jail = BubblewrapJail(workdir_path=tmp_path)
+        result = jail.run(args=["test", "-d", runtime_dir])
+        assert result.returncode == 0
 
     def test_proc_isolation(self, tmp_path: pathlib.Path) -> None:
         """Verify PID namespace isolation via /proc."""

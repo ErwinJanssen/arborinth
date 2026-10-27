@@ -112,8 +112,11 @@ workspace's scratch directory (the `tmp` subdirectory) is mounted read-write at
 the host. The workspace's cache directory (the `cache` subdirectory) is mounted
 read-write at the user's cache directory (`XDG_CACHE_HOME`, default `~/.cache`),
 so tools that cache data, such as package managers, write to the workspace
-instead of failing on the read-only host cache. Mounts configured with `--mount`
-are applied after the defaults, in the order given, so a mount can override a
+instead of failing on the read-only host cache. `/run` is masked with a fresh
+tmpfs, so host sockets, such as the ssh-agent and D-Bus, are not reachable from
+the sandbox. The user's runtime directory and the resolver configuration are
+preserved, so tools and DNS keep working. Mounts configured with `--mount` are
+applied after the defaults, in the order given, so a mount can override a
 default mount for the same destination (for example, `--mount tmpfs:/tmp`
 restores an ephemeral `/tmp`).
 
