@@ -23,6 +23,9 @@ and this project adheres to
 - The clone's `origin` remote now points at the original repository with a
   relative path, so that workspaces keep working when the repository directory
   is moved.
+- The `arborinth/<workspace_name>` remote in the original repository now uses a
+  relative path to the workspace clone as well, so that fetching from a
+  workspace keeps working when the repository directory is moved.
 - The `bubblewrap` jail backend now binds the workspace's scratch directory at
   `/tmp`, instead of a fresh tmpfs. Scratch data now persists across invocations
   and can be inspected from the host. An ephemeral `/tmp` can still be requested

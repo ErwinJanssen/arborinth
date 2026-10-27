@@ -128,7 +128,8 @@ class Project:
 
         Also adds the workspace's clone as a remote in the original repository
         with the name `arborinth/<workspace_name>`, allowing the original repo
-        to pull changes from the workspace.
+        to pull changes from the workspace. Like the clone's `origin`, the
+        remote uses a relative path.
 
         Args:
             name: The name of the workspace to create.

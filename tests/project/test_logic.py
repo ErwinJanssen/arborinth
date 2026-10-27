@@ -201,19 +201,21 @@ class TestCreateWorkspace:
         """`create_workspace` should add workspace clone as remote in original repo."""
         workspace = tmp_project.create_workspace("test_remote_workspace")
 
-        # Check that the remote was added to the original repository
+        # Check that the remote was added to the original repository, and that
+        # it points to the workspace clone with a path relative to the
+        # repository root. `get-url` fails if the remote does not exist, and
+        # the exact URL must be the relative path, not an absolute path that
+        # merely contains it.
         remote_name = f"arborinth/{workspace.name}"
         proc = subprocess.run(
-            ["git", "remote", "-v"],
+            ["git", "remote", "get-url", remote_name],
             cwd=tmp_project.repo_root_path,
             capture_output=True,
             check=True,
             text=True,
         )
 
-        # Check that the remote exists in the output
-        assert remote_name in proc.stdout
-        assert str(workspace.workdir_path) in proc.stdout
+        assert proc.stdout.strip() == f".arborinth/workspaces/{workspace.name}/workdir"
 
     def test_create_workspace_sets_relative_origin_url(
         self, tmp_project: logic.Project
@@ -237,7 +239,7 @@ class TestCreateWorkspace:
     def test_create_workspace_fetch_works_after_repo_move(
         self, tmp_path: pathlib.Path
     ) -> None:
-        """The clone's `origin` should keep working after the repo is moved."""
+        """Workspace remotes should keep working after the repo is moved."""
         repo_path = tmp_path / "repo"
         repo_path.mkdir()
         subprocess.run(["git", "init"], cwd=repo_path, check=True, capture_output=True)
@@ -258,15 +260,26 @@ class TestCreateWorkspace:
         shutil.move(repo_path, moved_path)
         moved_workdir_path = moved_path / workdir_path.relative_to(repo_path)
 
-        proc = subprocess.run(
+        # The clone's `origin` is registered with a relative path.
+        origin_proc = subprocess.run(
             ["git", "fetch", "origin"],
             cwd=moved_workdir_path / "sub",
             capture_output=True,
             check=False,
             text=True,
         )
+        assert origin_proc.returncode == 0, origin_proc.stderr
 
-        assert proc.returncode == 0, proc.stderr
+        # The workspace remote in the original repository is registered with
+        # a relative path as well.
+        remote_proc = subprocess.run(
+            ["git", "fetch", "arborinth/test_move"],
+            cwd=moved_path,
+            capture_output=True,
+            check=False,
+            text=True,
+        )
+        assert remote_proc.returncode == 0, remote_proc.stderr
 
     def test_create_workspace_git_not_installed(
         self, monkeypatch: pytest.MonkeyPatch, tmp_project: logic.Project

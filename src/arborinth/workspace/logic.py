@@ -123,11 +123,15 @@ class Workspace:
         """Register this workspace as a remote in the original repository.
 
         Adds a git remote named `arborinth/<workspace_name>` pointing to the
-        workspace's clone directory in the original repository.
+        workspace's clone directory in the original repository. The remote
+        uses a path relative to the repository root, so that it keeps working
+        when the repository directory is moved.
 
         Raises:
             RuntimeError: If registering the remote fails.
         """
+        relative = os.path.relpath(self.workdir_path, self.project.repo_root_path)
+
         try:
             subprocess.run(
                 [
@@ -135,7 +139,7 @@ class Workspace:
                     "remote",
                     "add",
                     self.remote_name,
-                    str(self.workdir_path),
+                    relative,
                 ],
                 cwd=self.project.repo_root_path,
                 check=True,
