@@ -461,15 +461,16 @@ class TestBubblewrapJail:
         assert bind_index(cache_bind) < bind_index(workdir_bind)
 
 
-class TestRunMaskArgs:
-    """Tests for the `_run_mask_args` static method."""
+class TestRunMaskSpecs:
+    """Tests for the `_run_mask_specs` static method."""
 
     def test_masks_run(self, tmp_path: pathlib.Path) -> None:
         """The masked directory should be replaced by a tmpfs."""
         run = tmp_path / "run"
-        result = BubblewrapJail._run_mask_args(run, tmp_path / "resolv.conf")
+        result = BubblewrapJail._run_mask_specs(run, tmp_path / "resolv.conf")
 
-        assert result[:2] == ["--tmpfs", str(run)]
+        expected = MountSpec(mount_type=MountType.TMPFS, source=None, dest=run)
+        assert result == [expected]
 
     def test_runtime_dir_under_run_masked(
         self, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
@@ -479,9 +480,13 @@ class TestRunMaskArgs:
         runtime_dir = run / "user" / "1000"
         monkeypatch.setenv("XDG_RUNTIME_DIR", str(runtime_dir))
 
-        result = BubblewrapJail._run_mask_args(run, tmp_path / "resolv.conf")
+        result = BubblewrapJail._run_mask_specs(run, tmp_path / "resolv.conf")
 
-        assert result[2:4] == ["--tmpfs", str(runtime_dir)]
+        expected = [
+            MountSpec(mount_type=MountType.TMPFS, source=None, dest=run),
+            MountSpec(mount_type=MountType.TMPFS, source=None, dest=runtime_dir),
+        ]
+        assert result == expected
 
     def test_runtime_dir_outside_run_not_masked(
         self, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
@@ -489,11 +494,11 @@ class TestRunMaskArgs:
         """A runtime dir outside the masked dir should not get a tmpfs."""
         monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path / "runtime"))
 
-        result = BubblewrapJail._run_mask_args(
+        result = BubblewrapJail._run_mask_specs(
             tmp_path / "run", tmp_path / "resolv.conf"
         )
 
-        assert result[2:] == []
+        assert len(result) == 1
 
     def test_resolv_conf_symlink_into_run_bound(self, tmp_path: pathlib.Path) -> None:
         """A resolv.conf symlink into the masked dir should get a bind."""
@@ -505,18 +510,19 @@ class TestRunMaskArgs:
         resolv_conf = tmp_path / "resolv.conf"
         resolv_conf.symlink_to(target)
 
-        result = BubblewrapJail._run_mask_args(run, resolv_conf)
+        result = BubblewrapJail._run_mask_specs(run, resolv_conf)
 
-        assert result[-3:] == ["--ro-bind", str(target), str(target)]
+        expected = MountSpec(mount_type=MountType.RO, source=target, dest=target)
+        assert result[-1] == expected
 
     def test_resolv_conf_regular_file_not_bound(self, tmp_path: pathlib.Path) -> None:
         """A regular resolv.conf file is visible through the root bind."""
         resolv_conf = tmp_path / "resolv.conf"
         resolv_conf.touch()
 
-        result = BubblewrapJail._run_mask_args(tmp_path / "run", resolv_conf)
+        result = BubblewrapJail._run_mask_specs(tmp_path / "run", resolv_conf)
 
-        assert "--ro-bind" not in result
+        assert all(spec.mount_type is not MountType.RO for spec in result)
 
     def test_resolv_conf_symlink_outside_run_not_bound(
         self, tmp_path: pathlib.Path
@@ -528,9 +534,9 @@ class TestRunMaskArgs:
         resolv_conf = tmp_path / "resolv.conf"
         resolv_conf.symlink_to(other / "resolv.conf")
 
-        result = BubblewrapJail._run_mask_args(tmp_path / "run", resolv_conf)
+        result = BubblewrapJail._run_mask_specs(tmp_path / "run", resolv_conf)
 
-        assert "--ro-bind" not in result
+        assert all(spec.mount_type is not MountType.RO for spec in result)
 
     @pytest.mark.parametrize(
         ("mount", "expected"),

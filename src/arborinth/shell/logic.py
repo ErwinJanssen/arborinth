@@ -318,11 +318,11 @@ class BubblewrapJail(Jail):
         return []
 
     @staticmethod
-    def _run_mask_args(
+    def _run_mask_specs(
         run: pathlib.Path = pathlib.Path("/run"),
         resolv_conf: pathlib.Path = pathlib.Path("/etc/resolv.conf"),
-    ) -> list[str]:
-        """Return bwrap arguments that mask the given runtime directory.
+    ) -> list[MountSpec]:
+        """Return mount specs that mask the given runtime directory.
 
         The directory is replaced by a fresh tmpfs, so that files in it, such
         as host socket files, are not reachable from the sandbox.
@@ -337,24 +337,32 @@ class BubblewrapJail(Jail):
             resolv_conf: The path of the resolver configuration.
 
         Returns:
-            A list of bwrap arguments.
+            A list of mount specs.
         """
-        args = ["--tmpfs", str(run)]
+        specs = [MountSpec(mount_type=MountType.TMPFS, source=None, dest=run)]
 
         # The runtime directory of the user usually points into the masked
         # directory. Provide an empty one, because tools expect it to exist.
         runtime_dir = os.environ.get("XDG_RUNTIME_DIR")
         if runtime_dir is not None and pathlib.Path(runtime_dir).is_relative_to(run):
-            args.extend(["--tmpfs", runtime_dir])
+            specs.append(
+                MountSpec(
+                    mount_type=MountType.TMPFS,
+                    source=None,
+                    dest=pathlib.Path(runtime_dir),
+                )
+            )
 
         # Keep DNS working when the resolver configuration is a symlink into
         # the masked directory, as on systems using systemd-resolved.
         if resolv_conf.is_symlink():
             target = resolv_conf.resolve()
             if target.is_relative_to(run):
-                args.extend(["--ro-bind", str(target), str(target)])
+                specs.append(
+                    MountSpec(mount_type=MountType.RO, source=target, dest=target)
+                )
 
-        return args
+        return specs
 
     def build_command(
         self, args: typing.Sequence[str] | None = None
@@ -370,6 +378,65 @@ class BubblewrapJail(Jail):
         command = args or [_util.get_default_shell()]
         workdir_str = str(self.workdir_path.resolve())
 
+        # The default mounts, in mount order. The scratch and cache
+        # directories are mounted before the working directory, so that they
+        # cannot shadow the working directory bind.
+        mounts: list[MountSpec] = [
+            # Bind the root filesystem read-only
+            MountSpec(mount_type=MountType.RO, source=None, dest=pathlib.Path("/")),
+            # Provide private /dev and /proc
+            MountSpec(mount_type=MountType.DEV, source=None, dest=pathlib.Path("/dev")),
+            MountSpec(
+                mount_type=MountType.PROC, source=None, dest=pathlib.Path("/proc")
+            ),
+        ]
+
+        # Mask `/run`, so that host sockets (such as the ssh-agent and D-Bus)
+        # are not reachable from the sandbox.
+        mounts.extend(self._run_mask_specs())
+
+        # Mount `/tmp`: the scratch directory if one is configured, otherwise
+        # a fresh tmpfs.
+        if self.tmp_path is None:
+            mounts.append(
+                MountSpec(
+                    mount_type=MountType.TMPFS,
+                    source=None,
+                    dest=pathlib.Path("/tmp"),  # noqa: S108
+                )
+            )
+        else:
+            mounts.append(
+                MountSpec(
+                    mount_type=MountType.RW,
+                    source=self.tmp_path,
+                    dest=pathlib.Path("/tmp"),  # noqa: S108
+                )
+            )
+
+        # Bind the cache directory at the user's cache directory: if
+        # `XDG_CACHE_HOME` is set, that directory is used, otherwise `~/.cache`.
+        if self.cache_path is not None:
+            cache_dest = os.environ.get("XDG_CACHE_HOME") or str(
+                pathlib.Path.home() / ".cache"
+            )
+            mounts.append(
+                MountSpec(
+                    mount_type=MountType.RW,
+                    source=self.cache_path,
+                    dest=pathlib.Path(cache_dest),
+                )
+            )
+
+        # Bind the working directory read-write
+        mounts.append(
+            MountSpec(
+                mount_type=MountType.RW,
+                source=pathlib.Path(workdir_str),
+                dest=pathlib.Path(workdir_str),
+            )
+        )
+
         bwrap_args: list[str] = [
             "bwrap",
             # Unshare all namespaces for proper isolation
@@ -379,51 +446,10 @@ class BubblewrapJail(Jail):
             # Set working directory inside the sandbox
             "--chdir",
             workdir_str,
-            # Bind the root filesystem read-only
-            "--ro-bind",
-            "/",
-            "/",
-            # Provide private /dev and /proc
-            "--dev",
-            "/dev",
-            "--proc",
-            "/proc",
         ]
 
-        # Mask `/run`, so that host sockets (such as the ssh-agent and D-Bus)
-        # are not reachable from the sandbox.
-        bwrap_args.extend(self._run_mask_args())
-
-        # Mount `/tmp`: the scratch directory if one is configured, otherwise a
-        # fresh tmpfs. This is applied before the working directory bind below,
-        # so that the scratch directory cannot shadow the working directory if
-        # it happens to be located under `/tmp`.
-        if self.tmp_path is None:
-            bwrap_args.extend(["--tmpfs", "/tmp"])  # noqa: S108
-        else:
-            bwrap_args.extend(["--bind", str(self.tmp_path), "/tmp"])  # noqa: S108
-
-        # Bind the cache directory at the user's cache directory: if
-        # `XDG_CACHE_HOME` is set, that directory is used, otherwise `~/.cache`.
-        # Like the `/tmp` mount, this is applied before the working directory
-        # bind so that it cannot shadow the working directory.
-        if self.cache_path is not None:
-            cache_dest = os.environ.get("XDG_CACHE_HOME") or str(
-                pathlib.Path.home() / ".cache"
-            )
-            bwrap_args.extend(["--bind", str(self.cache_path), cache_dest])
-
-        bwrap_args.extend(
-            [
-                # Bind the working directory read-write
-                "--bind",
-                workdir_str,
-                workdir_str,
-            ]
-        )
-
-        # Add user-specified mounts after the defaults
-        for mount in self.mount_specs:
+        # Add the default mounts, followed by the user-specified mounts
+        for mount in [*mounts, *self.mount_specs]:
             bwrap_args.extend(self._mount_to_bwrap_args(mount))
 
         return [
