@@ -461,10 +461,13 @@ class TestBubblewrapJail:
         assert bind_index(cache_bind) < bind_index(workdir_bind)
 
     def test_build_command_with_home_path_binds_home(
-        self, tmp_path: pathlib.Path
+        self, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """A configured home_path should be bound at the user's home dir."""
         home_dir = tmp_path / "home"
+        # No tool paths under the home directory, so only the home bind
+        # itself is expected.
+        monkeypatch.setenv("PATH", "/usr/bin")
         jail = BubblewrapJail(workdir_path=tmp_path, home_path=home_dir)
 
         result = jail.build_command(args=["echo", "test"])
@@ -486,6 +489,20 @@ class TestBubblewrapJail:
             result[i] == "--bind" and result[i + 2] == str(home)
             for i in range(len(result) - 2)
         )
+
+    def test_build_command_binds_home_tools(
+        self, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Tool paths on PATH under the home directory should be bound."""
+        home = pathlib.Path.home()
+        home_dir = tmp_path / "home"
+        monkeypatch.setenv("PATH", f"/usr/bin{os.pathsep}{home}/.local/bin")
+        jail = BubblewrapJail(workdir_path=tmp_path, home_path=home_dir)
+
+        result = jail.build_command(args=["echo", "test"])
+
+        tool_bind = ["--ro-bind", str(home / ".local"), str(home / ".local")]
+        assert any(result[i : i + 3] == tool_bind for i in range(len(result) - 2))
 
     def test_build_command_home_mount_precedes_other_binds(
         self, tmp_path: pathlib.Path
@@ -593,6 +610,61 @@ class TestRunMaskSpecs:
         result = BubblewrapJail._run_mask_specs(tmp_path / "run", resolv_conf)
 
         assert all(spec.mount_type is not MountType.RO for spec in result)
+
+
+class TestToolMountSpecs:
+    """Tests for the `_tool_mount_specs` static method."""
+
+    @pytest.mark.parametrize(
+        ("path_env", "expected"),
+        [
+            pytest.param("{home}/bin", ["bin"], id="direct-child-entry-bound"),
+            pytest.param("{home}/.local/bin", [".local"], id="parent-bound"),
+            pytest.param(
+                "{home}/.local/bin" + os.pathsep + "{home}/.local/bin",
+                [".local", ".local"],
+                id="duplicate-entries-not-deduplicated",
+            ),
+            pytest.param(
+                "{home}/workspace/proj/.venv/bin",
+                ["workspace/proj/.venv"],
+                id="venv-binds-venv-not-project",
+            ),
+            # The home directory itself, an entry outside the home directory,
+            # an empty entry and an entry with a nonexistent parent are all
+            # skipped.
+            pytest.param(
+                "{home}:/usr/bin::{home}/missing/bin",
+                [],
+                id="non-bindable-entries-skipped",
+            ),
+        ],
+    )
+    def test_tool_mount_specs(
+        self, tmp_path: pathlib.Path, path_env: str, expected: list[str]
+    ) -> None:
+        """Tool paths under the home directory should get read-only binds.
+
+        Each `PATH` entry under the home directory is bound through its parent
+        directory, so that support files next to the tools remain available. The
+        home directory itself is never bound, and duplicate entries in `PATH`
+        result in duplicate binds.
+        """
+        home = tmp_path / "home"
+        for relative in expected:
+            (home / relative).mkdir(parents=True, exist_ok=True)
+
+        result = BubblewrapJail._tool_mount_specs(home, path_env.format(home=home))
+
+        expected_specs = [
+            MountSpec(
+                mount_type=MountType.RO,
+                source=home / relative,
+                dest=home / relative,
+            )
+            for relative in expected
+        ]
+        assert result == expected_specs
 
     @pytest.mark.parametrize(
         ("mount", "expected"),
@@ -873,6 +945,78 @@ class TestBubblewrapJailIntegration:
         assert write_result.returncode == 0
         assert read_result.returncode == 0
         assert (home_dir / "probe").exists()
+
+    def test_home_tool_on_path_available(self, tmp_path: pathlib.Path) -> None:
+        """Tools on PATH under the home directory should remain available."""
+        home = pathlib.Path.home()
+        tool = None
+        for entry in os.environ.get("PATH", "").split(os.pathsep):
+            entry_path = pathlib.Path(entry)
+            if not entry or not entry_path.is_relative_to(home):
+                continue
+            if not entry_path.is_dir():
+                continue
+            candidates = [f for f in entry_path.iterdir() if f.is_file()]
+            if candidates:
+                tool = candidates[0]
+                break
+        if tool is None:
+            pytest.skip("no tool on PATH under the home directory")
+
+        home_dir = tmp_path / "home"
+        home_dir.mkdir()
+        jail = BubblewrapJail(workdir_path=tmp_path, home_path=home_dir)
+
+        result = jail.run(args=["test", "-x", str(tool)])
+
+        assert result.returncode == 0
+
+    def test_home_deep_path_tool_not_overbroad(self, tmp_path: pathlib.Path) -> None:
+        """A deep PATH entry exposes its parent, not the tree above it.
+
+        A project-local entry on `PATH` (e.g. `<project>/.venv/bin`) must not
+        expose the project directory above it. Every host entry next to the
+        bound parent acts as a stand-in for a secret: it must not be
+        reachable from the sandbox.
+        """
+        home = pathlib.Path.home()
+        entry = None
+        for candidate in os.environ.get("PATH", "").split(os.pathsep):
+            candidate_path = pathlib.Path(candidate)
+            if (
+                not candidate
+                or candidate_path == home
+                or not candidate_path.is_relative_to(home)
+                or len(candidate_path.relative_to(home).parts) < 4  # noqa: PLR2004
+                or not candidate_path.parent.is_dir()
+            ):
+                continue
+            entry = candidate_path
+            break
+        if entry is None:
+            pytest.skip("no sufficiently deep PATH entry under the home directory")
+
+        # bwrap creates the path of the bind destination inside the masked
+        # home directory, so the directory above the bound parent exists, but
+        # every host entry next to the bound parent must be absent.
+        siblings = [
+            path
+            for path in entry.parent.parent.iterdir()
+            if path.name != entry.parent.name
+        ]
+        if not siblings:
+            pytest.skip("no entries next to the parent of the PATH entry")
+
+        home_dir = tmp_path / "home"
+        home_dir.mkdir()
+        jail = BubblewrapJail(workdir_path=tmp_path, home_path=home_dir)
+
+        parent_result = jail.run(args=["test", "-d", str(entry.parent)])
+        assert parent_result.returncode == 0
+
+        for sibling in siblings:
+            sibling_result = jail.run(args=["test", "!", "-e", str(sibling)])
+            assert sibling_result.returncode == 0, sibling
 
     def test_proc_isolation(self, tmp_path: pathlib.Path) -> None:
         """Verify PID namespace isolation via /proc."""

@@ -32,9 +32,10 @@ and this project adheres to
 - The `bubblewrap` jail backend now masks the user's home directory: the
   workspace's home directory is mounted read-write in its place, so files in the
   host home directory, such as SSH keys and configuration, are not reachable
-  from the sandbox. Tools installed under the host home directory are not
-  reachable either; they can be exposed explicitly with `--mount`. The
-  workspace's cache directory is mounted inside the workspace home directory.
+  from the sandbox. For each `PATH` entry under the user's home directory, the
+  parent directory of the entry is mounted read-only, so tools installed under
+  it keep working. The workspace's cache directory is mounted inside the
+  workspace home directory.
 - The `Project` class resolves the Git repository root once, when it is created,
   instead of running `git rev-parse` on every access. Creating a `Project` now
   fails immediately if the working directory is not inside a Git repository.

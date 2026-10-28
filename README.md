@@ -126,8 +126,8 @@ restores an ephemeral `/tmp`).
 The home directory is masked as well: the workspace's home directory (the `home`
 subdirectory) is mounted read-write in its place, so files in the host home
 directory, such as SSH keys and configuration, are not reachable from the
-sandbox. Tools installed under the host home directory are not reachable either;
-they can be exposed explicitly with `--mount`.
+sandbox. Tool directories on `PATH` that live under the home directory are
+mounted read-only, so tools keep working.
 
 ## Usage
 

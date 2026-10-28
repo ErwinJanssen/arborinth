@@ -291,8 +291,9 @@ class BubblewrapJail(Jail):
     directory is bound read-write at `/tmp`, otherwise a fresh tmpfs is used. If
     `cache_path` is set, that directory is bound read-write at the user's cache
     directory. If `home_path` is set, that directory is bound read-write at the
-    user's home directory, masking the host home directory. `/run` is masked
-    with a fresh tmpfs, so that host sockets are not reachable from the sandbox.
+    user's home directory, masking the host home directory, and tool paths on
+    `PATH` under it are bound read-only. `/run` is masked with a fresh tmpfs,
+    so that host sockets are not reachable from the sandbox.
 
     Security note: This provides isolation but NOT security. A malicious process
     can still read sensitive files from the host.
@@ -371,6 +372,52 @@ class BubblewrapJail(Jail):
 
         return specs
 
+    @staticmethod
+    def _tool_mount_specs(
+        home: pathlib.Path, path_env: str | None = None
+    ) -> list[MountSpec]:
+        """Return read-only mount specs for tool paths under the home directory.
+
+        When the home directory is masked, tools installed under it (e.g. in
+        `~/.local/bin` or `~/.nix-profile/bin`) disappear from the sandbox.
+        Each `PATH` entry under the home directory is made available again,
+        read-only, by binding its parent directory: the entry `~/.local/bin`
+        binds `~/.local`, so that support files next to the tools (e.g. in
+        `~/.local/share`) remain available, and a project-local entry like
+        `<project>/.venv/bin` binds only `<project>/.venv`, not the project
+        directory above it. An entry directly under the home directory (e.g.
+        `~/bin`) is bound itself, because its parent is the home directory,
+        which is never bound. Entries whose parent directory does not exist
+        are skipped.
+
+        Args:
+            home: The masked home directory to resolve tool paths against.
+            path_env: The `PATH` environment variable value. Defaults to the
+                current environment.
+
+        Returns:
+            A list of mount specs.
+        """
+        if path_env is None:
+            path_env = os.environ.get("PATH", "")
+
+        specs: list[MountSpec] = []
+        for entry in path_env.split(os.pathsep):
+            entry_path = pathlib.Path(entry)
+            if not entry or entry_path == home or not entry_path.is_relative_to(home):
+                continue
+            # Bind the parent directory of the entry, so that support files
+            # next to the tools remain available. The parent of an entry
+            # directly under the home directory is the home directory itself,
+            # which is never bound, so the entry is bound instead.
+            bind_path = entry_path if entry_path.parent == home else entry_path.parent
+            if not bind_path.is_dir():
+                continue
+            specs.append(
+                MountSpec(mount_type=MountType.RO, source=bind_path, dest=bind_path)
+            )
+        return specs
+
     def build_command(
         self, args: typing.Sequence[str] | None = None
     ) -> typing.Sequence[str]:
@@ -404,13 +451,16 @@ class BubblewrapJail(Jail):
 
         # Mask the user's home directory: it is replaced by the workspace home
         # directory, so that files in it (e.g. SSH keys and configuration) are
-        # not reachable from the sandbox. The home mount comes before the
-        # cache and working directory binds, so that it cannot shadow them.
+        # not reachable from the sandbox. Tool paths on `PATH` under it are
+        # bound read-only, so that tools remain available. The home mount comes
+        # before the cache and working directory binds, so that it cannot
+        # shadow them.
         if self.home_path is not None:
             home = pathlib.Path.home()
             mounts.append(
                 MountSpec(mount_type=MountType.RW, source=self.home_path, dest=home)
             )
+            mounts.extend(self._tool_mount_specs(home))
 
         # Mount `/tmp`: the scratch directory if one is configured, otherwise
         # a fresh tmpfs.
