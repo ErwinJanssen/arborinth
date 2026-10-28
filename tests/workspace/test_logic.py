@@ -300,6 +300,31 @@ class TestWorkspaceShell:
         cache_bind = ["--bind", str(tmp_workspace.cache_path), cache_dest]
         assert any(command[i : i + 3] == cache_bind for i in range(len(command) - 2))
 
+    def test_shell_binds_home_dir_in_jail(
+        self, tmp_workspace: Workspace, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """`shell` should pass the home directory to the jail."""
+        captured: dict[str, typing.Any] = {}
+
+        def mock_run(
+            jail: BubblewrapJail,
+            args: typing.Sequence[str] | None = None,
+        ) -> subprocess.CompletedProcess:
+            """Mock `Jail.run` to capture the built jail command."""
+            captured["command"] = list(jail.build_command(args))
+            captured["home_path"] = jail.home_path
+            return subprocess.CompletedProcess(args=args, returncode=0)
+
+        monkeypatch.setattr(BubblewrapJail, "run", mock_run)
+
+        tmp_workspace.shell(args=["true"], jail_backend=JailBackend.BUBBLEWRAP)
+
+        command = captured["command"]
+        assert captured["home_path"] == tmp_workspace.home_path
+        home = pathlib.Path.home()
+        home_bind = ["--bind", str(tmp_workspace.home_path), str(home)]
+        assert any(command[i : i + 3] == home_bind for i in range(len(command) - 2))
+
 
 class TestWorkspaceShellJail:
     """Integration tests for `shell` with jail backends.
@@ -339,3 +364,40 @@ class TestWorkspaceShellJail:
         )
         assert proc.returncode == 0
         assert (tmp_workspace.cache_path / probe).exists()
+
+    def test_shell_bubblewrap_commit_in_workdir(self, tmp_project: Project) -> None:
+        """A commit in the jail should use the identity seeded into the clone.
+
+        The host's global Git configuration is not reachable inside the sandbox,
+        so the identity must come from the clone's local configuration.
+        """
+        # Configure the identity on the original repository, so that the
+        # clone is seeded with it.
+        subprocess.run(
+            ["git", "config", "--local", "user.name", "Test User"],
+            cwd=tmp_project.repo_root_path,
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "config", "--local", "user.email", "test@example.com"],
+            cwd=tmp_project.repo_root_path,
+            check=True,
+            capture_output=True,
+        )
+        workspace = tmp_project.create_workspace("test_commit")
+
+        proc = workspace.shell(
+            args=["git", "commit", "--allow-empty", "-m", "probe"],
+            jail_backend=JailBackend.BUBBLEWRAP,
+        )
+
+        assert proc.returncode == 0
+        log_proc = subprocess.run(
+            ["git", "log", "-1", "--pretty=%an <%ae>"],
+            cwd=workspace.workdir_path,
+            capture_output=True,
+            check=True,
+            text=True,
+        )
+        assert log_proc.stdout.strip() == "Test User <test@example.com>"

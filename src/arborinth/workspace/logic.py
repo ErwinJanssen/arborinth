@@ -102,8 +102,9 @@ class Workspace:
         """Path to the home directory within this workspace.
 
         The home directory holds per-workspace home state (e.g. tool
-        configuration) for commands run in this workspace. It is created on
-        demand when a shell is run.
+        configuration) for commands run in this workspace and is bound
+        read-write at the user's home directory inside jail backends that
+        support mounts, masking the host home directory.
 
         Returns:
             The absolute path to the workspace's home directory.
@@ -348,5 +349,6 @@ class Workspace:
             workdir_path=self.workdir_path,
             tmp_path=self.tmp_path,
             cache_path=self.cache_path,
+            home_path=self.home_path,
             mount_specs=mount_specs,
         ).run(args=args)

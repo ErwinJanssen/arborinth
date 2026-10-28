@@ -84,7 +84,8 @@ original repository or other workspaces. It also contains a scratch directory
 mounts, which holds disposable data and can be safely deleted at any time. It
 also contains a cache directory (in the `cache` subdirectory), which holds
 disposable cached data, such as package manager caches. It also contains a home
-directory (in the `home` subdirectory), which holds per-workspace home state,
+directory (in the `home` subdirectory), mounted at the user's home directory
+inside jail backends that support mounts, which holds per-workspace home state,
 such as tool configuration.
 
 ### Shell
@@ -121,6 +122,12 @@ preserved, so tools and DNS keep working. Mounts configured with `--mount` are
 applied after the defaults, in the order given, so a mount can override a
 default mount for the same destination (for example, `--mount tmpfs:/tmp`
 restores an ephemeral `/tmp`).
+
+The home directory is masked as well: the workspace's home directory (the `home`
+subdirectory) is mounted read-write in its place, so files in the host home
+directory, such as SSH keys and configuration, are not reachable from the
+sandbox. Tools installed under the host home directory are not reachable either;
+they can be exposed explicitly with `--mount`.
 
 ## Usage
 

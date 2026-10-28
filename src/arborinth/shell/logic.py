@@ -143,12 +143,18 @@ class Jail(abc.ABC):
             mounts bind at the user's cache directory (`XDG_CACHE_HOME`,
             default `~/.cache`). If `None`, no such bind is made. The
             directory must exist when the jail is run.
+        home_path: Path to a directory that jail backends that support mounts
+            bind at the user's home directory, masking the host home
+            directory. If `None`, no such bind is made and the host home
+            directory remains visible through the root bind. The directory
+            must exist when the jail is run.
         mount_specs: Additional mount specifications for this jail.
     """
 
     workdir_path: pathlib.Path
     tmp_path: pathlib.Path | None = None
     cache_path: pathlib.Path | None = None
+    home_path: pathlib.Path | None = None
     mount_specs: typing.Sequence[MountSpec] = ()
 
     def run(
@@ -215,8 +221,8 @@ class NoneJail(Jail):
     For example, when you want to perform git operations in another repository.
 
     Note:
-        `tmp_path`, `cache_path` and `mount_specs` are accepted but ignored by
-        this jail since it does not use any sandboxing.
+        `tmp_path`, `cache_path`, `home_path` and `mount_specs` are accepted
+        but ignored by this jail since it does not use any sandboxing.
     """
 
     def run(
@@ -284,8 +290,9 @@ class BubblewrapJail(Jail):
     Only the working directory is bound read-write. If `tmp_path` is set, that
     directory is bound read-write at `/tmp`, otherwise a fresh tmpfs is used. If
     `cache_path` is set, that directory is bound read-write at the user's cache
-    directory. `/run` is masked with a fresh tmpfs, so that host sockets are
-    not reachable from the sandbox.
+    directory. If `home_path` is set, that directory is bound read-write at the
+    user's home directory, masking the host home directory. `/run` is masked
+    with a fresh tmpfs, so that host sockets are not reachable from the sandbox.
 
     Security note: This provides isolation but NOT security. A malicious process
     can still read sensitive files from the host.
@@ -394,6 +401,16 @@ class BubblewrapJail(Jail):
         # Mask `/run`, so that host sockets (such as the ssh-agent and D-Bus)
         # are not reachable from the sandbox.
         mounts.extend(self._run_mask_specs())
+
+        # Mask the user's home directory: it is replaced by the workspace home
+        # directory, so that files in it (e.g. SSH keys and configuration) are
+        # not reachable from the sandbox. The home mount comes before the
+        # cache and working directory binds, so that it cannot shadow them.
+        if self.home_path is not None:
+            home = pathlib.Path.home()
+            mounts.append(
+                MountSpec(mount_type=MountType.RW, source=self.home_path, dest=home)
+            )
 
         # Mount `/tmp`: the scratch directory if one is configured, otherwise
         # a fresh tmpfs.

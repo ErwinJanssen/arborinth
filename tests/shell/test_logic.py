@@ -460,6 +460,62 @@ class TestBubblewrapJail:
 
         assert bind_index(cache_bind) < bind_index(workdir_bind)
 
+    def test_build_command_with_home_path_binds_home(
+        self, tmp_path: pathlib.Path
+    ) -> None:
+        """A configured home_path should be bound at the user's home dir."""
+        home_dir = tmp_path / "home"
+        jail = BubblewrapJail(workdir_path=tmp_path, home_path=home_dir)
+
+        result = jail.build_command(args=["echo", "test"])
+
+        home = pathlib.Path.home()
+        home_bind = ["--bind", str(home_dir), str(home)]
+        assert any(result[i : i + 3] == home_bind for i in range(len(result) - 2))
+
+    def test_build_command_without_home_path_keeps_host_home(
+        self, tmp_path: pathlib.Path
+    ) -> None:
+        """Without a home_path, the host home directory remains visible."""
+        jail = BubblewrapJail(workdir_path=tmp_path)
+
+        result = jail.build_command(args=["echo", "test"])
+
+        home = pathlib.Path.home()
+        assert not any(
+            result[i] == "--bind" and result[i + 2] == str(home)
+            for i in range(len(result) - 2)
+        )
+
+    def test_build_command_home_mount_precedes_other_binds(
+        self, tmp_path: pathlib.Path
+    ) -> None:
+        """The home mount should be applied before the cache and workdir binds.
+
+        The cache is bound inside the home directory, and the working directory
+        can be located under it, so a later home mount would shadow those binds.
+        """
+        home = pathlib.Path.home()
+        home_dir = tmp_path / "home"
+        cache = tmp_path / "cache"
+        jail = BubblewrapJail(
+            workdir_path=tmp_path, home_path=home_dir, cache_path=cache
+        )
+
+        result = list(jail.build_command(args=["echo", "test"]))
+
+        cache_dest = os.environ.get("XDG_CACHE_HOME") or str(home / ".cache")
+        home_bind = ["--bind", str(home_dir), str(home)]
+        cache_bind = ["--bind", str(cache), cache_dest]
+        workdir_bind = ["--bind", str(tmp_path.resolve()), str(tmp_path.resolve())]
+
+        def bind_index(bind: list[str]) -> int:
+            """Return the position of a three-element bind in the command."""
+            return next(i for i in range(len(result) - 2) if result[i : i + 3] == bind)
+
+        assert bind_index(home_bind) < bind_index(cache_bind)
+        assert bind_index(home_bind) < bind_index(workdir_bind)
+
 
 class TestRunMaskSpecs:
     """Tests for the `_run_mask_specs` static method."""
@@ -789,6 +845,34 @@ class TestBubblewrapJailIntegration:
         jail = BubblewrapJail(workdir_path=tmp_path)
         result = jail.run(args=["test", "-d", runtime_dir])
         assert result.returncode == 0
+
+    def test_home_host_files_not_reachable(self, tmp_path: pathlib.Path) -> None:
+        """Host files in the home directory should not exist in the sandbox."""
+        ssh_dir = pathlib.Path.home() / ".ssh"
+        if not ssh_dir.exists():
+            pytest.skip("no host file in the home directory to check")
+
+        home_dir = tmp_path / "home"
+        home_dir.mkdir()
+        jail = BubblewrapJail(workdir_path=tmp_path, home_path=home_dir)
+
+        result = jail.run(args=["test", "-e", str(ssh_dir)])
+
+        assert result.returncode != 0
+
+    def test_home_writable_and_persistent(self, tmp_path: pathlib.Path) -> None:
+        """The workspace home directory should be writable and persistent."""
+        home_dir = tmp_path / "home"
+        home_dir.mkdir()
+        jail = BubblewrapJail(workdir_path=tmp_path, home_path=home_dir)
+
+        home = pathlib.Path.home()
+        write_result = jail.run(args=["touch", f"{home}/probe"])
+        read_result = jail.run(args=["test", "-e", f"{home}/probe"])
+
+        assert write_result.returncode == 0
+        assert read_result.returncode == 0
+        assert (home_dir / "probe").exists()
 
     def test_proc_isolation(self, tmp_path: pathlib.Path) -> None:
         """Verify PID namespace isolation via /proc."""
