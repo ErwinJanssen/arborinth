@@ -20,6 +20,12 @@ and this project adheres to
   `workdir`), exposed as `Workspace.cache_path`. Like the scratch directory, it
   is created on demand when a shell is run and can be safely deleted at any
   time.
+- Workspaces now have a home directory (the `home` subdirectory, next to
+  `workdir`), exposed as `Workspace.home_path`. Like the other workspace
+  directories, it is created on demand when a shell is run. Unlike the scratch
+  and cache directories, its contents are not disposable by definition: the
+  sandboxed process may store state in it, such as credentials. Deleting it does
+  not break anything, but discards that state.
 
 ### Changed
 

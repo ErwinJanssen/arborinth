@@ -98,6 +98,19 @@ class Workspace:
         return self.root_path / "cache"
 
     @property
+    def home_path(self) -> pathlib.Path:
+        """Path to the home directory within this workspace.
+
+        The home directory holds per-workspace home state (e.g. tool
+        configuration) for commands run in this workspace. It is created on
+        demand when a shell is run.
+
+        Returns:
+            The absolute path to the workspace's home directory.
+        """
+        return self.root_path / "home"
+
+    @property
     def remote_name(self) -> str:
         """Name of the remote in the original repository.
 
@@ -308,8 +321,9 @@ class Workspace:
         contains the cloned Git repository. The process's stdout and stderr are
         not captured, allowing for interactive use.
 
-        The workspace's scratch directory (`tmp_path`) and cache directory
-        (`cache_path`) are created if they do not exist and passed to the jail.
+        The workspace's scratch directory (`tmp_path`), cache directory
+        (`cache_path`) and home directory (`home_path`) are created if they do
+        not exist and passed to the jail.
 
         Args:
             args: The command and arguments to run. If `None`, runs the default
@@ -326,6 +340,9 @@ class Workspace:
 
         # The cache directory is created on demand.
         self.cache_path.mkdir(exist_ok=True)
+
+        # The home directory is created on demand.
+        self.home_path.mkdir(exist_ok=True)
 
         return jail_backend.value(
             workdir_path=self.workdir_path,

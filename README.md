@@ -83,7 +83,9 @@ original repository or other workspaces. It also contains a scratch directory
 (in the `tmp` subdirectory), mounted at `/tmp` inside jail backends that support
 mounts, which holds disposable data and can be safely deleted at any time. It
 also contains a cache directory (in the `cache` subdirectory), which holds
-disposable cached data, such as package manager caches.
+disposable cached data, such as package manager caches. It also contains a home
+directory (in the `home` subdirectory), which holds per-workspace home state,
+such as tool configuration.
 
 ### Shell
 
