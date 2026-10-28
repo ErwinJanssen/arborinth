@@ -10,6 +10,9 @@ and this project adheres to
 
 ### Added
 
+- Workspace clones are seeded with the commit identity (`user.name` and
+  `user.email`) of the original repository, so that commits can be created
+  inside workspaces without the host's Git configuration.
 - Workspaces now have a scratch directory (the `tmp` subdirectory, next to
   `workdir`), exposed as `Workspace.tmp_path`. It is created on demand when a
   shell is run and can be safely deleted at any time.

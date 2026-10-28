@@ -288,6 +288,61 @@ class TestCreateWorkspace:
         )
         assert remote_proc.returncode == 0, remote_proc.stderr
 
+    def test_create_workspace_seeds_commit_identity(
+        self,
+        tmp_project: logic.Project,
+        tmp_path: pathlib.Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """`create_workspace` should seed the clone with the host identity."""
+        git_config = tmp_path / "gitconfig"
+        git_config.write_text(
+            "[user]\n\tname = Test User\n\temail = test@example.com\n"
+        )
+        monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(git_config))
+        monkeypatch.setenv("GIT_CONFIG_SYSTEM", "/dev/null")
+
+        workspace = tmp_project.create_workspace("test_identity")
+
+        proc = subprocess.run(
+            ["git", "config", "--local", "--get", "user.name"],
+            cwd=workspace.workdir_path,
+            capture_output=True,
+            check=True,
+            text=True,
+        )
+        assert proc.stdout.strip() == "Test User"
+        email_proc = subprocess.run(
+            ["git", "config", "--local", "--get", "user.email"],
+            cwd=workspace.workdir_path,
+            capture_output=True,
+            check=True,
+            text=True,
+        )
+        assert email_proc.stdout.strip() == "test@example.com"
+
+    def test_create_workspace_without_identity_skips_seeding(
+        self,
+        tmp_project: logic.Project,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """`create_workspace` should leave the clone unchanged without identity."""
+        monkeypatch.setenv("GIT_CONFIG_GLOBAL", "/dev/null")
+        monkeypatch.setenv("GIT_CONFIG_SYSTEM", "/dev/null")
+
+        workspace = tmp_project.create_workspace("test_no_identity")
+
+        # No identity is configured anywhere, so the clone has no local
+        # identity either
+        proc = subprocess.run(
+            ["git", "config", "--local", "--get", "user.name"],
+            cwd=workspace.workdir_path,
+            capture_output=True,
+            check=False,
+            text=True,
+        )
+        assert proc.returncode != 0
+
     def test_create_workspace_git_not_installed(
         self, monkeypatch: pytest.MonkeyPatch, tmp_project: logic.Project
     ) -> None:

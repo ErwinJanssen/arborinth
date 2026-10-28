@@ -213,13 +213,14 @@ class Project:
         workspace = Workspace(name=name, project=self)
 
         # Point the clone's origin remote at the original repository with a
-        # relative path, and register the workspace as a remote in the
-        # original repository.
+        # relative path, seed the commit identity into the clone, and register
+        # the workspace as a remote in the original repository.
         try:
             workspace.set_relative_origin_url()
+            workspace.seed_commit_identity()
             workspace.register_as_remote()
         except RuntimeError:
-            # Clean up the workspace directory if either step failed
+            # Clean up the workspace directory if any step failed
             if workspace_path.exists():
                 shutil.rmtree(workspace_path)
             raise

@@ -195,6 +195,54 @@ class Workspace:
             )
             raise RuntimeError(message) from exc
 
+    def seed_commit_identity(self) -> None:
+        """Seed the commit identity from the original repository into the clone.
+
+        A fresh clone has no commit identity of its own: Git does not write
+        `user.name` and `user.email` to a clone's local configuration, so
+        commits in the workspace depend on the surrounding Git configuration.
+        The identity of the original repository is written to the clone's
+        local configuration, so that commits can be created inside the
+        workspace without it. If the original repository has no identity
+        configured, the clone is left unchanged.
+
+        Raises:
+            RuntimeError: If seeding the identity fails.
+        """
+        identity = {}
+        for key in ("user.name", "user.email"):
+            # `git config --get` exits with a non-zero status when the key is
+            # not set, which is not an error here.
+            result = subprocess.run(
+                ["git", "config", "--get", key],
+                cwd=self.project.repo_root_path,
+                capture_output=True,
+                check=False,
+                text=True,
+            )
+            if result.returncode == 0:
+                identity[key] = result.stdout.strip()
+
+        if len(identity) < 2:  # noqa: PLR2004
+            return
+
+        try:
+            for key, value in identity.items():
+                subprocess.run(
+                    ["git", "config", "--local", key, value],
+                    cwd=self.workdir_path,
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+        except subprocess.CalledProcessError as exc:
+            message = (
+                f"Failed to seed the commit identity for workspace "
+                f"'{self.name}': "
+                f"{exc.stderr.strip() if exc.stderr else 'unknown error'}"
+            )
+            raise RuntimeError(message) from exc
+
     def unregister_as_remote(self) -> None:
         """Unregister this workspace's remote from the original repository.
 
