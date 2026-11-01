@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import os
 import pathlib
-import shutil
 import subprocess
 import typing
 
@@ -791,10 +790,10 @@ class TestBubblewrapJailIntegration:
     """Integration tests for BubblewrapJail that require bwrap to be installed."""
 
     @pytest.fixture(autouse=True)
-    def skip_without_bwrap(self) -> None:
-        """Skip all tests in this class if bwrap is not installed."""
-        if shutil.which("bwrap") is None:
-            pytest.skip("bubblewrap not installed")
+    def skip_without_bwrap(self, *, bwrap_usable: bool) -> None:
+        """Skip all tests in this class if bubblewrap cannot be used."""
+        if not bwrap_usable:
+            pytest.skip("bubblewrap not usable")
 
     @pytest.mark.parametrize(
         "args",

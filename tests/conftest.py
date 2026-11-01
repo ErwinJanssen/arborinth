@@ -34,3 +34,37 @@ def tmp_project(tmp_git_repo: pathlib.Path) -> Project:
 def tmp_workspace(tmp_project: Project) -> Workspace:
     """Create a random `Workspace` in a temporary `Project`."""
     return tmp_project.create_workspace(generate_random_string())
+
+
+@pytest.fixture(scope="session")
+def bwrap_usable() -> bool:
+    """Whether a bubblewrap sandbox can actually be started.
+
+    Bubblewrap being installed is not enough: in environments such as CI
+    containers, creating user namespaces may be forbidden, and every sandbox
+    start fails. A minimal sandbox is started to probe this. The fixture is
+    session-scoped, so the sandbox is started at most once per session.
+    """
+    try:
+        result = subprocess.run(
+            [
+                "bwrap",
+                "--unshare-all",
+                "--ro-bind",
+                "/",
+                "/",
+                "--dev",
+                "/dev",
+                "--proc",
+                "/proc",
+                "--",
+                "true",
+            ],
+            capture_output=True,
+            check=False,
+            timeout=30,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        # `OSError` covers the binary being missing from `PATH`.
+        return False
+    return result.returncode == 0

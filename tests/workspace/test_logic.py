@@ -333,10 +333,10 @@ class TestWorkspaceShellJail:
     """
 
     @pytest.fixture(autouse=True)
-    def skip_without_bwrap(self) -> None:
-        """Skip all tests in this class if bwrap is not installed."""
-        if shutil.which("bwrap") is None:
-            pytest.skip("bubblewrap not installed")
+    def skip_without_bwrap(self, *, bwrap_usable: bool) -> None:
+        """Skip all tests in this class if bubblewrap cannot be used."""
+        if not bwrap_usable:
+            pytest.skip("bubblewrap not usable")
 
     def test_shell_bubblewrap_writes_to_workspace_tmp(
         self, tmp_workspace: Workspace
