@@ -157,6 +157,10 @@ def initialize_submodules(workspace: Workspace) -> None:
     relative URLs at clone time, so the URL is replaced with `git remote
     set-url` after the submodule is initialized.
 
+    Each initialized submodule clone is also seeded with the commit
+    identity of the original repository, like the workspace clone itself
+    (`Workspace.seed_commit_identity`).
+
     Args:
         workspace: The workspace whose clone's submodules to initialize.
 
@@ -178,6 +182,8 @@ def initialize_submodules(workspace: Workspace) -> None:
     if not roots:
         return
 
+    identity = _util.read_commit_identity(workspace.project.repo_root_path)
+
     # Initialize breadth-first, level by level. Each entry pairs the working
     # tree of a parent clone with the submodules to initialize in it; the
     # first level's parent is the workspace clone itself.
@@ -191,6 +197,7 @@ def initialize_submodules(workspace: Workspace) -> None:
             for submodule in submodules:
                 worktree_path = parent_worktree_path / submodule.path
                 _set_relative_origin_url(workspace, submodule, worktree_path)
+                _seed_commit_identity(workspace, submodule, worktree_path, identity)
                 if submodule.children:
                     next_level.append((worktree_path, submodule.children))
         level = next_level
@@ -276,6 +283,38 @@ def _set_relative_origin_url(
         cwd=worktree_path,
         error_message=(
             f"Failed to set the origin URL of the submodule "
+            f"'{submodule.name}' of workspace '{workspace.name}'"
+        ),
+    )
+
+
+def _seed_commit_identity(
+    workspace: Workspace,
+    submodule: Submodule,
+    worktree_path: pathlib.Path,
+    identity: dict[str, str],
+) -> None:
+    """Seed the commit identity into a submodule clone.
+
+    The identity is the original repository's, read once for all
+    submodules; nothing is written when it is incomplete, so a submodule
+    clone is never left with a partial identity.
+
+    Args:
+        workspace: The workspace whose clone's submodules to initialize.
+        submodule: The submodule whose clone to seed.
+        worktree_path: The working tree of the submodule's clone.
+        identity: The identity of the original repository, as read by
+            `_util.read_commit_identity`.
+
+    Raises:
+        RuntimeError: If Git is not installed or the command fails.
+    """
+    _util.write_commit_identity(
+        worktree_path,
+        identity,
+        error_message=(
+            f"Failed to seed the commit identity into the submodule "
             f"'{submodule.name}' of workspace '{workspace.name}'"
         ),
     )

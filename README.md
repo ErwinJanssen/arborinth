@@ -92,8 +92,8 @@ The clone includes the repository's submodules, nested ones included. They
 are initialized from the original repository's local submodule object
 stores, without network access; submodules without a local store are
 skipped with a warning. Each initialized submodule's `origin` remote
-points at its store with a path relative to the submodule clone, so the
-remote keeps working when the repository directory is moved.
+points at its store with a path relative to the submodule clone, and the
+clone is seeded with the original repository's commit identity.
 
 ### Shell
 

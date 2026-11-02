@@ -16,7 +16,9 @@ and this project adheres to
   warning.
 - Each initialized submodule's `origin` remote points at its store with
   a path relative to the submodule clone, so that fetching keeps working
-  when the repository directory is moved.
+  when the repository directory is moved. Submodule clones are also
+  seeded with the original repository's commit identity, so that commits
+  work without the host's Git configuration.
 
 ## v0.3.0 - 2026-11-02
 

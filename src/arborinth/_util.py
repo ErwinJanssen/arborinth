@@ -1,6 +1,6 @@
 """Utility functions and descriptors for Arborinth.
 
-This module provides validation utilities used across Arborinth.
+This module provides validation and Git utilities used across Arborinth.
 """
 
 from __future__ import annotations
@@ -216,3 +216,72 @@ def get_default_shell() -> str:
         raise FileNotFoundError(message)
 
     return shell
+
+
+def read_commit_identity(repo_path: pathlib.Path) -> dict[str, str]:
+    """Read the commit identity of a repository.
+
+    The identity is read from the repository's effective configuration,
+    which includes the host's Git configuration: it is the identity a commit
+    in that repository would use.
+
+    Args:
+        repo_path: The root path of the repository.
+
+    Returns:
+        A dictionary of the `user.name` and `user.email` values that are
+        configured, which may be partial or empty.
+    """
+    identity = {}
+    for key in ("user.name", "user.email"):
+        # `git config --get` exits with a non-zero status when the key is
+        # not set, which is not an error here. The environment is
+        # inherited rather than isolated: the identity is read from the
+        # repository's effective configuration, which includes the
+        # host's Git configuration.
+        result = run_git(
+            ["config", "--get", key],
+            cwd=repo_path,
+            check=False,
+            isolated=False,
+        )
+        if result.returncode == 0:
+            identity[key] = result.stdout.strip()
+    return identity
+
+
+def write_commit_identity(
+    worktree_path: pathlib.Path,
+    identity: dict[str, str],
+    *,
+    error_message: str,
+) -> None:
+    """Write a commit identity to a repository's local configuration.
+
+    A fresh clone has no commit identity of its own: Git does not write
+    `user.name` and `user.email` to a clone's local configuration, so
+    commits in the clone depend on the surrounding Git configuration.
+    Writing the identity to the clone's local configuration lets commits
+    be created inside the clone without it.
+
+    Args:
+        worktree_path: The working tree of the clone to write to.
+        identity: The identity to write, as returned by
+            `read_commit_identity`. Nothing is written when the identity is
+            incomplete, so a clone is never left with a partial identity.
+        error_message: The prefix of the message of the `RuntimeError`
+            raised when writing the identity fails.
+
+    Raises:
+        RuntimeError: If Git is not installed or writing the identity
+            fails.
+    """
+    if len(identity) < 2:  # noqa: PLR2004
+        return
+
+    for key, value in identity.items():
+        run_git(
+            ["config", "--local", key, value],
+            cwd=worktree_path,
+            error_message=error_message,
+        )

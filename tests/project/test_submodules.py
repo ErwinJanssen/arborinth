@@ -530,3 +530,70 @@ class TestSubmoduleOrigins:
             text=True,
         )
         assert inner_proc.returncode == 0, inner_proc.stderr
+
+
+class TestSubmoduleCommitIdentity:
+    """Tests for seeding the commit identity into submodule clones."""
+
+    def test_identity_seeded_into_submodules(
+        self,
+        tmp_path: pathlib.Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Submodule clones should get the original repository's identity.
+
+        The original repository's repo-local identity wins over the host's
+        global one, so the submodule clones must be seeded with it, not
+        with the host's. Without a local identity, commits made inside a
+        submodule from within a jail fail, since the host's Git
+        configuration is not reachable there.
+        """
+        repo_path = make_repo_with_nested_submodules(tmp_path)
+        git_config = tmp_path / "gitconfig"
+        git_config.write_text(
+            "[user]\n\tname = Global User\n\temail = global@example.com\n"
+        )
+        monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(git_config))
+        monkeypatch.setenv("GIT_CONFIG_SYSTEM", "/dev/null")
+
+        project = logic.Project(workdir=repo_path)
+        workspace = project.create_workspace("ws")
+
+        outer_workdir_path = workspace.workdir_path / "vendor" / "outer"
+        assert get_local_config(outer_workdir_path, "user.name") == "Repo User"
+        assert get_local_config(outer_workdir_path, "user.email") == "repo@example.com"
+
+        inner_workdir_path = outer_workdir_path / "lib" / "inner"
+        assert get_local_config(inner_workdir_path, "user.name") == "Repo User"
+        assert get_local_config(inner_workdir_path, "user.email") == "repo@example.com"
+
+    def test_without_identity_submodules_left_unconfigured(
+        self,
+        tmp_path: pathlib.Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Submodule clones should stay unconfigured without an identity.
+
+        No identity is configured anywhere, so the submodule clones must
+        not be given one either. Workspace creation still succeeds.
+        """
+        repo_path = make_repo_with_nested_submodules(tmp_path)
+        # The fixture's repositories commit with a repo-local identity;
+        # remove it from the main repository, so that no identity is
+        # reachable from it.
+        run_git(repo_path, "config", "--local", "--unset", "user.name")
+        run_git(repo_path, "config", "--local", "--unset", "user.email")
+        monkeypatch.setenv("GIT_CONFIG_GLOBAL", "/dev/null")
+        monkeypatch.setenv("GIT_CONFIG_SYSTEM", "/dev/null")
+
+        project = logic.Project(workdir=repo_path)
+
+        with warnings.catch_warnings(record=True) as record:
+            warnings.simplefilter("always")
+            workspace = project.create_workspace("ws")
+
+        assert not record
+        outer_workdir_path = workspace.workdir_path / "vendor" / "outer"
+        assert get_local_config(outer_workdir_path, "user.name") is None
+        inner_workdir_path = outer_workdir_path / "lib" / "inner"
+        assert get_local_config(inner_workdir_path, "user.name") is None

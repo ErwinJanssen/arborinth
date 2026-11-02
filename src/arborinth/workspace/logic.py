@@ -192,33 +192,14 @@ class Workspace:
         Raises:
             RuntimeError: If seeding the identity fails.
         """
-        identity = {}
-        for key in ("user.name", "user.email"):
-            # `git config --get` exits with a non-zero status when the key
-            # is not set, which is not an error here. The environment is
-            # inherited rather than isolated: the identity to seed is the
-            # one the user commits with, which may live in the host's
-            # global Git configuration.
-            result = _util.run_git(
-                ["config", "--get", key],
-                cwd=self.project.repo_root_path,
-                check=False,
-                isolated=False,
-            )
-            if result.returncode == 0:
-                identity[key] = result.stdout.strip()
-
-        if len(identity) < 2:  # noqa: PLR2004
-            return
-
-        for key, value in identity.items():
-            _util.run_git(
-                ["config", "--local", key, value],
-                cwd=self.workdir_path,
-                error_message=(
-                    f"Failed to seed the commit identity for workspace '{self.name}'"
-                ),
-            )
+        identity = _util.read_commit_identity(self.project.repo_root_path)
+        _util.write_commit_identity(
+            self.workdir_path,
+            identity,
+            error_message=(
+                f"Failed to seed the commit identity for workspace '{self.name}'"
+            ),
+        )
 
     def initialize_submodules(self) -> None:
         """Initialize the clone's submodules.
@@ -232,7 +213,9 @@ class Workspace:
 
         Each initialized submodule's `origin` remote is set to a relative
         path to its store in the original repository, so that the workspace
-        keeps working when the repository directory is moved.
+        keeps working when the repository directory is moved. Each
+        initialized submodule clone is also seeded with the commit identity
+        of the original repository, like the workspace clone itself.
 
         A submodule whose local store is missing in the original repository
         (it was never initialized there) is skipped together with its whole
