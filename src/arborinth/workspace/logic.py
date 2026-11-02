@@ -16,6 +16,7 @@ import typing
 
 from arborinth import _util
 from arborinth.shell import JailBackend, MountSpec
+from arborinth.workspace import submodules
 
 if typing.TYPE_CHECKING:
     import pathlib
@@ -218,6 +219,23 @@ class Workspace:
                     f"Failed to seed the commit identity for workspace '{self.name}'"
                 ),
             )
+
+    def initialize_submodules(self) -> None:
+        """Initialize the clone's top-level submodules.
+
+        A plain clone does not initialize submodules: their directories in
+        the clone are left empty. The top-level submodules are enumerated
+        from the original repository and cloned into the clone from their
+        local object stores there, with no network access.
+
+        A submodule whose local store is missing in the original repository
+        (it was never initialized there) is skipped together with its whole
+        subtree and reported with a warning.
+
+        Raises:
+            RuntimeError: If initializing a submodule fails.
+        """
+        submodules.initialize_submodules(self)
 
     def unregister_as_remote(self) -> None:
         """Unregister this workspace's remote from the original repository.

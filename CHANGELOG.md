@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Workspaces
+
+- Workspace clones now initialize their top-level submodules from the
+  original repository's local submodule object stores, without network
+  access. Submodules without a local store are skipped with a warning.
+
 ## v0.3.0 - 2026-11-02
 
 This release hardens the `bubblewrap` jail backend, gives workspaces their own

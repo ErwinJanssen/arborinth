@@ -120,6 +120,11 @@ class Project:
         relative path, so that the workspace keeps working when the repository
         directory is moved.
 
+        The clone's top-level submodules are initialized from their local
+        object stores in the original repository. Submodules whose local
+        store is missing in the original repository are skipped with a
+        warning.
+
         Also adds the workspace's clone as a remote in the original repository
         with the name `arborinth/<workspace_name>`, allowing the original repo
         to pull changes from the workspace. Like the clone's `origin`, the
@@ -190,11 +195,13 @@ class Project:
         workspace = Workspace(name=name, project=self)
 
         # Point the clone's origin remote at the original repository with a
-        # relative path, seed the commit identity into the clone, and register
-        # the workspace as a remote in the original repository.
+        # relative path, seed the commit identity into the clone, initialize
+        # the clone's submodules, and register the workspace as a remote in
+        # the original repository.
         try:
             workspace.set_relative_origin_url()
             workspace.seed_commit_identity()
+            workspace.initialize_submodules()
             workspace.register_as_remote()
         except RuntimeError:
             # Clean up the workspace directory if any step failed

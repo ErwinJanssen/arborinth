@@ -1,0 +1,296 @@
+"""Tests for submodule initialization in workspace clones."""
+
+from __future__ import annotations
+
+import shutil
+import subprocess
+import typing
+import warnings
+
+import pytest
+
+from arborinth.project import logic
+
+if typing.TYPE_CHECKING:
+    import pathlib
+
+# Environment for the Git commands of the test fixtures: they must not
+# depend on the host system's Git configuration. Commit identities come
+# from repo-local configuration.
+GIT_ENV = {
+    "GIT_CONFIG_GLOBAL": "/dev/null",
+    "GIT_CONFIG_SYSTEM": "/dev/null",
+    "GIT_TERMINAL_PROMPT": "0",
+}
+
+
+def run_git(cwd: pathlib.Path, *args: str) -> str:
+    """Run a Git command in a fixture repository and return its output."""
+    result = subprocess.run(
+        ["git", *args],
+        cwd=cwd,
+        env=GIT_ENV,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return result.stdout
+
+
+def get_local_config(cwd: pathlib.Path, key: str) -> str | None:
+    """Read a local configuration value, or `None` when it is not set."""
+    result = subprocess.run(
+        ["git", "config", "--local", "--get", key],
+        cwd=cwd,
+        env=GIT_ENV,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    return result.stdout.strip() if result.returncode == 0 else None
+
+
+def init_repo(path: pathlib.Path) -> None:
+    """Create a Git repository with a commit identity of its own."""
+    path.mkdir(parents=True)
+    run_git(path, "init")
+    run_git(path, "config", "--local", "user.name", "Repo User")
+    run_git(path, "config", "--local", "user.email", "repo@example.com")
+
+
+def commit(path: pathlib.Path, message: str) -> None:
+    """Commit all changes in a fixture repository."""
+    run_git(path, "add", "-A")
+    run_git(path, "commit", "-m", message)
+
+
+def add_submodule(
+    repo_path: pathlib.Path, name: str, source_path: pathlib.Path, path: str
+) -> None:
+    """Add a repository as a submodule of a fixture repository.
+
+    The submodule is cloned over the `file://` transport, which requires the
+    `protocol.file.allow` relaxation.
+    """
+    run_git(
+        repo_path,
+        "-c",
+        "protocol.file.allow=always",
+        "submodule",
+        "add",
+        "--name",
+        name,
+        f"file://{source_path}",
+        path,
+    )
+
+
+def make_repo_with_submodule(base_path: pathlib.Path) -> pathlib.Path:
+    """Create a repository with one initialized submodule named `dep`.
+
+    The submodule is added at the path `dep-dir`, from the repository `dep`
+    next to it. After the submodule is added, the source repository moves on
+    with another commit, so the gitlink recorded in the main repository no
+    longer points at its HEAD.
+    """
+    dep_path = base_path / "dep"
+    init_repo(dep_path)
+    (dep_path / "dep.txt").write_text("dep-content\n")
+    commit(dep_path, "dep")
+
+    repo_path = base_path / "main"
+    init_repo(repo_path)
+    (repo_path / "main.txt").write_text("main-content\n")
+    commit(repo_path, "main")
+    add_submodule(repo_path, "dep", dep_path, "dep-dir")
+    commit(repo_path, "add submodule")
+
+    # Move the source repository past the pinned gitlink.
+    (dep_path / "dep.txt").write_text("dep-content-2\n")
+    commit(dep_path, "dep, second commit")
+    return repo_path
+
+
+def store_files(store_path: pathlib.Path) -> list[pathlib.Path]:
+    """List the files in a module store's object store, deterministically."""
+    objects_path = store_path / "objects"
+    return sorted(path for path in objects_path.rglob("*") if path.is_file())
+
+
+class TestTopLevelSubmodules:
+    """Tests for initializing top-level submodules in workspace clones."""
+
+    def test_submodule_initialized_at_pinned_sha(self, tmp_path: pathlib.Path) -> None:
+        """The clone should contain the submodule at the pinned gitlink SHA.
+
+        A plain clone leaves the submodule directory empty; the submodule's
+        working tree must be checked out in the workspace clone, at the
+        commit recorded by the superproject's gitlink.
+        """
+        repo_path = make_repo_with_submodule(tmp_path)
+        project = logic.Project(workdir=repo_path)
+
+        workspace = project.create_workspace("ws")
+
+        # The content is that of the pinned commit, not of the source
+        # repository's HEAD, which has moved on since.
+        content_path = workspace.workdir_path / "dep-dir" / "dep.txt"
+        assert content_path.read_text() == "dep-content\n"
+
+        # The submodule clone's HEAD is the gitlink SHA recorded in the
+        # superproject's tree.
+        gitlink_sha = run_git(
+            workspace.workdir_path, "rev-parse", "HEAD:dep-dir"
+        ).strip()
+        submodule_sha = run_git(
+            workspace.workdir_path / "dep-dir", "rev-parse", "HEAD"
+        ).strip()
+        assert submodule_sha == gitlink_sha
+
+    def test_submodule_cloned_from_local_store(self, tmp_path: pathlib.Path) -> None:
+        """The submodule should be cloned from the original's object store.
+
+        The clone's local configuration gets a `file://` URL override for the
+        submodule, pointing at the original repository's module store.
+        """
+        repo_path = make_repo_with_submodule(tmp_path)
+        project = logic.Project(workdir=repo_path)
+
+        workspace = project.create_workspace("ws")
+
+        store_path = repo_path / ".git" / "modules" / "dep"
+        assert (
+            get_local_config(workspace.workdir_path, "submodule.dep.url")
+            == f"file://{store_path}"
+        )
+        # The submodule has its own object store inside the workspace clone.
+        assert (workspace.workdir_path / ".git" / "modules" / "dep").is_dir()
+
+    def test_initialized_submodules_do_not_warn(self, tmp_path: pathlib.Path) -> None:
+        """Submodules with a local store should not be reported as skipped."""
+        repo_path = make_repo_with_submodule(tmp_path)
+        project = logic.Project(workdir=repo_path)
+
+        with warnings.catch_warnings(record=True) as record:
+            warnings.simplefilter("always")
+            project.create_workspace("ws")
+
+        assert not record
+
+    def test_missing_store_skipped_with_warning(self, tmp_path: pathlib.Path) -> None:
+        """A submodule without a local store should be skipped with a warning.
+
+        The original repository never initialized it, so the workspace clone
+        must not initialize it either: no URL override is written, so Git
+        never touches its recorded URL and there is no network fallback. The
+        other submodules are still initialized.
+        """
+        repo_path = make_repo_with_submodule(tmp_path)
+
+        # A second, healthy submodule.
+        dep2_path = tmp_path / "dep2"
+        init_repo(dep2_path)
+        (dep2_path / "dep2.txt").write_text("dep2-content\n")
+        commit(dep2_path, "dep2")
+        add_submodule(repo_path, "kept", dep2_path, "kept-dir")
+        commit(repo_path, "add kept submodule")
+
+        # Simulate `dep` never being initialized in the original repository.
+        shutil.rmtree(repo_path / ".git" / "modules" / "dep")
+        shutil.rmtree(repo_path / "dep-dir")
+
+        project = logic.Project(workdir=repo_path)
+        with pytest.warns(
+            UserWarning,
+            match="Submodule 'dep' of workspace 'ws' has no local object store",
+        ):
+            workspace = project.create_workspace("ws")
+
+        # The skipped submodule is left uninitialized.
+        assert not (workspace.workdir_path / "dep-dir" / "dep.txt").exists()
+        assert get_local_config(workspace.workdir_path, "submodule.dep.url") is None
+
+        # The healthy submodule is initialized.
+        content_path = workspace.workdir_path / "kept-dir" / "dep2.txt"
+        assert content_path.read_text() == "dep2-content\n"
+        kept_store_path = repo_path / ".git" / "modules" / "kept"
+        assert (
+            get_local_config(workspace.workdir_path, "submodule.kept.url")
+            == f"file://{kept_store_path}"
+        )
+
+    def test_no_shared_objects_with_original_store(
+        self, tmp_path: pathlib.Path
+    ) -> None:
+        """Submodule stores must not share object files with the original.
+
+        A clone with a plain path would hardlink the objects of the original
+        store, and a process confined to the workspace could then corrupt the
+        original repository's object store by writing to the shared files. The
+        `file://` transport copies the objects instead, so the original
+        store's files are untouched.
+        """
+        repo_path = make_repo_with_submodule(tmp_path)
+        original_files = store_files(repo_path / ".git" / "modules" / "dep")
+        assert original_files
+        stat_before = original_files[0].stat()
+
+        project = logic.Project(workdir=repo_path)
+        workspace = project.create_workspace("ws")
+
+        # The original store's object file is untouched: same inode, and no
+        # additional hardlink to it was created.
+        stat_after = original_files[0].stat()
+        assert stat_after.st_ino == stat_before.st_ino
+        assert stat_after.st_nlink == stat_before.st_nlink
+
+        # The workspace clone got its own copies of the objects: no file of
+        # the clone's store shares an inode with the original store.
+        clone_store_path = workspace.workdir_path / ".git" / "modules" / "dep"
+        clone_files = store_files(clone_store_path)
+        assert clone_files
+        original_inodes = {
+            (path.stat().st_dev, path.stat().st_ino) for path in original_files
+        }
+        clone_inodes = {
+            (path.stat().st_dev, path.stat().st_ino) for path in clone_files
+        }
+        assert not original_inodes & clone_inodes
+
+    def test_protocol_file_allow_not_persisted(self, tmp_path: pathlib.Path) -> None:
+        """The `protocol.file.allow` relaxation must not be persisted.
+
+        Untrusted processes run Git in the workspace clone later, and
+        persisting the relaxation would broaden their Git attack surface. It
+        is passed as a per-invocation `-c` option only.
+        """
+        repo_path = make_repo_with_submodule(tmp_path)
+        project = logic.Project(workdir=repo_path)
+
+        workspace = project.create_workspace("ws")
+
+        for file_path in (workspace.workdir_path / ".git").rglob("*"):
+            if file_path.is_file():
+                assert b"protocol.file.allow" not in file_path.read_bytes()
+
+    def test_submodule_init_failure_cleans_up_workspace(
+        self, tmp_path: pathlib.Path
+    ) -> None:
+        """A failing submodule initialization should clean up the workspace.
+
+        Git fails when the store has no objects to serve; the workspace
+        directory is then removed, like for the other steps of workspace
+        creation.
+        """
+        repo_path = make_repo_with_submodule(tmp_path)
+        # Break the store's object store, but leave it detectable as a store.
+        for file_path in store_files(repo_path / ".git" / "modules" / "dep"):
+            file_path.unlink()
+
+        project = logic.Project(workdir=repo_path)
+
+        with pytest.raises(RuntimeError, match="Failed to initialize the submodules"):
+            project.create_workspace("ws")
+
+        workspace_path = project.workspace_root_path / "ws"
+        assert not workspace_path.exists()
