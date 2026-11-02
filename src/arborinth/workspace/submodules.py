@@ -2,13 +2,15 @@
 
 A plain Git clone does not initialize submodules: it only creates empty
 directories where the working trees of the submodules would be. This
-module initializes the top-level submodules of a workspace clone from the
-local Git object stores of the original repository, so that no network
-access is needed.
+module initializes the submodules of a workspace clone, nested ones
+included, from the local Git object stores of the original repository,
+so that no network access is needed.
 
 The object store of a submodule is a Git directory of its own, kept under
-the `modules/` subdirectory of the original repository's Git directory,
-keyed by the submodule's name, which can differ from its path.
+the `modules/` subdirectory of its parent repository's Git directory,
+keyed by the submodule's name, which can differ from its path. The store
+of a nested submodule lives under the `modules/` subdirectory of its
+parent's store.
 
 Two invariants hold throughout. First, each submodule is cloned from its
 store over the `file://` transport: `git submodule update` has no
@@ -46,62 +48,105 @@ class Submodule:
         store_path: The absolute path of the submodule's local object store
             in the original repository: the `modules/<name>` subdirectory of
             the parent repository's Git directory.
+        children: The submodules of the submodule, nested one level deeper.
     """
 
     name: str
     path: str
     store_path: pathlib.Path
+    children: list[Submodule] = dataclasses.field(default_factory=list)
 
 
 def enumerate_submodules(
     repo_root_path: pathlib.Path,
 ) -> tuple[list[Submodule], list[tuple[str, pathlib.Path]]]:
-    """Enumerate the top-level submodules of a repository.
+    """Enumerate the submodules of a repository.
 
-    The submodules are read from the repository's `.gitmodules` file. A
-    submodule whose local object store is missing in the original repository
-    (it was never initialized there) is skipped together with its whole
-    subtree and returned as skipped; the caller reports it.
+    The top-level submodules are read from the repository's `.gitmodules`
+    file, and the nested ones from the `.gitmodules` files of the
+    repository's submodule working trees. A submodule whose local object
+    store is missing in the original repository (it was never initialized
+    there) is skipped together with its whole subtree and returned as
+    skipped; the caller reports it.
 
     Args:
         repo_root_path: The root path of the original repository.
 
     Returns:
-        The top-level submodules that have a local object store, and the
-        names and store paths of those that do not.
+        The top-level submodules that have a local object store, each with
+        its own submodules, and the names and store paths of those that do
+        not.
+
+    Raises:
+        RuntimeError: If a `.gitmodules` file cannot be read.
+    """
+    skipped: list[tuple[str, pathlib.Path]] = []
+    roots = _enumerate_submodules(repo_root_path, repo_root_path / ".git", skipped)
+    return roots, skipped
+
+
+def _enumerate_submodules(
+    worktree_path: pathlib.Path,
+    store_path: pathlib.Path,
+    skipped: list[tuple[str, pathlib.Path]],
+) -> list[Submodule]:
+    """Enumerate the submodules of one level of a repository.
+
+    Args:
+        worktree_path: The working tree whose `.gitmodules` file lists the
+            submodules to enumerate.
+        store_path: The Git directory whose `modules/` subdirectory holds
+            the local object stores of those submodules.
+        skipped: Collected across all levels: the names and store paths of
+            the submodules without a local object store.
+
+    Returns:
+        The submodules that have a local object store, each with its own
+        submodules.
 
     Raises:
         RuntimeError: If the `.gitmodules` file cannot be read.
     """
-    gitmodules_path = repo_root_path / ".gitmodules"
+    gitmodules_path = worktree_path / ".gitmodules"
     if not gitmodules_path.exists():
-        return [], []
+        return []
 
     submodules = []
-    skipped = []
     for name, path in _parse_gitmodules(gitmodules_path).items():
-        store_path = repo_root_path / ".git" / "modules" / name
-        if not (store_path / "objects").is_dir():
-            skipped.append((name, store_path))
+        submodule_store_path = store_path / "modules" / name
+        if not (submodule_store_path / "objects").is_dir():
+            skipped.append((name, submodule_store_path))
             continue
-        submodules.append(Submodule(name=name, path=path, store_path=store_path))
-    return submodules, skipped
+        submodules.append(
+            Submodule(
+                name=name,
+                path=path,
+                store_path=submodule_store_path,
+                children=_enumerate_submodules(
+                    worktree_path / path, submodule_store_path, skipped
+                ),
+            )
+        )
+    return submodules
 
 
 def initialize_submodules(workspace: Workspace) -> None:
-    """Initialize the top-level submodules of a workspace clone.
+    """Initialize the submodules of a workspace clone.
 
-    The top-level submodules are enumerated from the original repository.
-    For each of them, the clone's local configuration gets a
-    `submodule.<name>.url` override that points at the submodule's local
-    object store, and `git submodule update --init` is run in the clone.
-    The overrides rely on the two invariants documented in the module
+    The submodules are enumerated from the original repository and
+    initialized breadth-first, level by level. For each level, every
+    submodule's parent clone gets a `submodule.<name>.url` override that
+    points at the submodule's local object store, and `git submodule
+    update --init` is run in that parent. The overrides for a level are
+    written into the level's parent clone, which only exists once that
+    parent has been initialized, hence the level-by-level order. The
+    overrides rely on the two invariants documented in the module
     docstring.
 
     A submodule whose local store is missing in the original repository is
-    skipped together with its whole subtree and reported with a warning;
-    it is never passed to Git, so it cannot fall back to its recorded URL
-    and the network.
+    skipped together with its whole subtree and reported with a warning; it
+    is never passed to Git, so it cannot fall back to its recorded URL and
+    the network.
 
     Args:
         workspace: The workspace whose clone's submodules to initialize.
@@ -109,7 +154,7 @@ def initialize_submodules(workspace: Workspace) -> None:
     Raises:
         RuntimeError: If Git is not installed or a Git command fails.
     """
-    submodules, skipped = enumerate_submodules(workspace.project.repo_root_path)
+    roots, skipped = enumerate_submodules(workspace.project.repo_root_path)
 
     # The skipped submodules are reported here rather than during
     # enumeration, so that the warning is attributed to the caller of this
@@ -121,11 +166,41 @@ def initialize_submodules(workspace: Workspace) -> None:
             f"submodules.",
             stacklevel=2,
         )
-    if not submodules:
+    if not roots:
         return
 
-    workdir_path = workspace.workdir_path
+    # Initialize breadth-first, level by level. Each entry pairs the working
+    # tree of a parent clone with the submodules to initialize in it; the
+    # first level's parent is the workspace clone itself.
+    level: list[tuple[pathlib.Path, list[Submodule]]] = [
+        (workspace.workdir_path, roots)
+    ]
+    while level:
+        next_level: list[tuple[pathlib.Path, list[Submodule]]] = []
+        for parent_worktree_path, submodules in level:
+            _initialize_level(workspace, parent_worktree_path, submodules)
+            for submodule in submodules:
+                worktree_path = parent_worktree_path / submodule.path
+                if submodule.children:
+                    next_level.append((worktree_path, submodule.children))
+        level = next_level
 
+
+def _initialize_level(
+    workspace: Workspace,
+    parent_worktree_path: pathlib.Path,
+    submodules: list[Submodule],
+) -> None:
+    """Initialize the submodules of one level in their parent clone.
+
+    Args:
+        workspace: The workspace whose clone's submodules to initialize.
+        parent_worktree_path: The working tree of the parent clone.
+        submodules: The submodules to initialize in the parent clone.
+
+    Raises:
+        RuntimeError: If Git is not installed or a Git command fails.
+    """
     for submodule in submodules:
         # Point the submodule at its local object store in the original
         # repository. The `file://` form is load-bearing; see the module
@@ -137,7 +212,7 @@ def initialize_submodules(workspace: Workspace) -> None:
                 f"submodule.{submodule.name}.url",
                 f"file://{submodule.store_path}",
             ],
-            cwd=workdir_path,
+            cwd=parent_worktree_path,
             error_message=(
                 f"Failed to configure the submodules of workspace '{workspace.name}'"
             ),
@@ -157,7 +232,7 @@ def initialize_submodules(workspace: Workspace) -> None:
             "--",
             *(submodule.path for submodule in submodules),
         ],
-        cwd=workdir_path,
+        cwd=parent_worktree_path,
         error_message=(
             f"Failed to initialize the submodules of workspace '{workspace.name}'"
         ),

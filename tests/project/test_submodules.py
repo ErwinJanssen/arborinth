@@ -117,6 +117,48 @@ def store_files(store_path: pathlib.Path) -> list[pathlib.Path]:
     return sorted(path for path in objects_path.rglob("*") if path.is_file())
 
 
+def make_repo_with_nested_submodules(base_path: pathlib.Path) -> pathlib.Path:
+    """Create a repository whose submodule has a submodule of its own.
+
+    The submodule `outer` is added at the path `vendor/outer`, from the
+    repository `outer` next to the main repository. The `outer` repository
+    itself has the submodule `inner`, added at the path `lib/inner` from the
+    repository `inner`. All submodules are initialized in the main
+    repository, so that it has local object stores for them.
+    """
+    inner_path = base_path / "inner"
+    init_repo(inner_path)
+    (inner_path / "inner.txt").write_text("inner-content\n")
+    commit(inner_path, "inner")
+
+    outer_path = base_path / "outer"
+    init_repo(outer_path)
+    (outer_path / "outer.txt").write_text("outer-content\n")
+    commit(outer_path, "outer")
+    add_submodule(outer_path, "inner", inner_path, "lib/inner")
+    commit(outer_path, "add inner submodule")
+
+    repo_path = base_path / "main"
+    init_repo(repo_path)
+    (repo_path / "main.txt").write_text("main-content\n")
+    commit(repo_path, "main")
+    add_submodule(repo_path, "outer", outer_path, "vendor/outer")
+    commit(repo_path, "add outer submodule")
+
+    # Initialize the nested submodule in the original repository, so that it
+    # has a local object store there as well.
+    run_git(
+        repo_path,
+        "-c",
+        "protocol.file.allow=always",
+        "submodule",
+        "update",
+        "--init",
+        "--recursive",
+    )
+    return repo_path
+
+
 class TestTopLevelSubmodules:
     """Tests for initializing top-level submodules in workspace clones."""
 
@@ -294,3 +336,123 @@ class TestTopLevelSubmodules:
 
         workspace_path = project.workspace_root_path / "ws"
         assert not workspace_path.exists()
+
+
+class TestNestedSubmodules:
+    """Tests for initializing nested submodules in workspace clones."""
+
+    def test_nested_submodule_initialized(self, tmp_path: pathlib.Path) -> None:
+        """Nested submodules should be initialized after their parent.
+
+        The nested submodule's working tree must be checked out in the
+        parent submodule's clone, at the gitlink SHA pinned by the parent,
+        with its own object store under the parent's.
+        """
+        repo_path = make_repo_with_nested_submodules(tmp_path)
+        project = logic.Project(workdir=repo_path)
+
+        workspace = project.create_workspace("ws")
+
+        outer_workdir_path = workspace.workdir_path / "vendor" / "outer"
+        content_path = outer_workdir_path / "outer.txt"
+        assert content_path.read_text() == "outer-content\n"
+
+        inner_workdir_path = outer_workdir_path / "lib" / "inner"
+        content_path = inner_workdir_path / "inner.txt"
+        assert content_path.read_text() == "inner-content\n"
+
+        # The nested submodule's HEAD is the gitlink SHA pinned by its
+        # parent.
+        gitlink_sha = run_git(outer_workdir_path, "rev-parse", "HEAD:lib/inner").strip()
+        inner_sha = run_git(inner_workdir_path, "rev-parse", "HEAD").strip()
+        assert inner_sha == gitlink_sha
+
+        # The nested submodule has its own object store in its parent's Git
+        # directory, mirroring the layout of the original repository.
+        inner_store_path = (
+            workspace.workdir_path / ".git" / "modules" / "outer" / "modules" / "inner"
+        )
+        assert inner_store_path.is_dir()
+
+    def test_nested_url_override_written_into_parent_clone(
+        self, tmp_path: pathlib.Path
+    ) -> None:
+        """The URL overrides of nested submodules belong to the parent clone.
+
+        A nested submodule is initialized by its parent's clone, so the
+        override for it is written into the parent clone's local
+        configuration, and the superproject clone only has overrides for
+        its own submodules.
+        """
+        repo_path = make_repo_with_nested_submodules(tmp_path)
+        project = logic.Project(workdir=repo_path)
+
+        workspace = project.create_workspace("ws")
+
+        outer_workdir_path = workspace.workdir_path / "vendor" / "outer"
+        inner_store_path = (
+            repo_path / ".git" / "modules" / "outer" / "modules" / "inner"
+        )
+        assert (
+            get_local_config(outer_workdir_path, "submodule.inner.url")
+            == f"file://{inner_store_path}"
+        )
+        outer_store_path = repo_path / ".git" / "modules" / "outer"
+        assert (
+            get_local_config(workspace.workdir_path, "submodule.outer.url")
+            == f"file://{outer_store_path}"
+        )
+        assert get_local_config(workspace.workdir_path, "submodule.inner.url") is None
+
+    def test_missing_nested_store_skipped_with_warning(
+        self, tmp_path: pathlib.Path
+    ) -> None:
+        """A nested submodule without a store should be skipped with a warning.
+
+        The original repository never initialized it, so the workspace clone
+        must not initialize it either. Its parent is still initialized.
+        """
+        repo_path = make_repo_with_nested_submodules(tmp_path)
+        # Simulate `inner` never being initialized in the original
+        # repository.
+        shutil.rmtree(repo_path / ".git" / "modules" / "outer" / "modules" / "inner")
+        shutil.rmtree(repo_path / "vendor" / "outer" / "lib" / "inner")
+
+        project = logic.Project(workdir=repo_path)
+        with pytest.warns(
+            UserWarning,
+            match="Submodule 'inner' of workspace 'ws' has no local object store",
+        ):
+            workspace = project.create_workspace("ws")
+
+        # The parent submodule is initialized, the skipped one is not.
+        outer_workdir_path = workspace.workdir_path / "vendor" / "outer"
+        content_path = outer_workdir_path / "outer.txt"
+        assert content_path.read_text() == "outer-content\n"
+        assert not (outer_workdir_path / "lib" / "inner" / "inner.txt").exists()
+
+    def test_missing_parent_store_skips_whole_subtree(
+        self, tmp_path: pathlib.Path
+    ) -> None:
+        """A missing top-level store should skip its whole subtree.
+
+        The nested submodules of a skipped submodule cannot be enumerated
+        without their parent, so exactly one warning is emitted, for the
+        parent.
+        """
+        repo_path = make_repo_with_nested_submodules(tmp_path)
+        # Simulate `outer` never being initialized in the original
+        # repository, taking its nested submodule with it.
+        shutil.rmtree(repo_path / ".git" / "modules" / "outer")
+        shutil.rmtree(repo_path / "vendor" / "outer")
+
+        project = logic.Project(workdir=repo_path)
+        with pytest.warns(
+            UserWarning,
+            match="Submodule 'outer' of workspace 'ws' has no local object store",
+        ) as record:
+            workspace = project.create_workspace("ws")
+
+        assert len(record) == 1
+        outer_workdir_path = workspace.workdir_path / "vendor" / "outer"
+        assert not (outer_workdir_path / "outer.txt").exists()

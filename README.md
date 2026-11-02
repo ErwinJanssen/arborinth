@@ -88,10 +88,10 @@ directory (in the `home` subdirectory), mounted at the user's home directory
 inside jail backends that support mounts, which holds per-workspace home state,
 such as tool configuration.
 
-The clone includes the repository's top-level submodules. They are
-initialized from the original repository's local submodule object stores,
-without network access; submodules without a local store are skipped with
-a warning.
+The clone includes the repository's submodules, nested ones included. They
+are initialized from the original repository's local submodule object
+stores, without network access; submodules without a local store are
+skipped with a warning.
 
 ### Shell
 

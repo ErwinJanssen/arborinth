@@ -10,9 +10,10 @@ and this project adheres to
 
 ### Workspaces
 
-- Workspace clones now initialize their top-level submodules from the
-  original repository's local submodule object stores, without network
-  access. Submodules without a local store are skipped with a warning.
+- Workspace clones now initialize their submodules, nested ones included,
+  from the original repository's local submodule object stores, without
+  network access. Submodules without a local store are skipped with a
+  warning.
 
 ## v0.3.0 - 2026-11-02
 

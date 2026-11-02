@@ -221,12 +221,14 @@ class Workspace:
             )
 
     def initialize_submodules(self) -> None:
-        """Initialize the clone's top-level submodules.
+        """Initialize the clone's submodules.
 
         A plain clone does not initialize submodules: their directories in
-        the clone are left empty. The top-level submodules are enumerated
-        from the original repository and cloned into the clone from their
-        local object stores there, with no network access.
+        the clone are left empty. The submodules are enumerated from the
+        original repository and cloned into the clone from their local
+        object stores there, with no network access. Nested submodules
+        are initialized level by level, after the submodule they belong
+        to.
 
         A submodule whose local store is missing in the original repository
         (it was never initialized there) is skipped together with its whole
