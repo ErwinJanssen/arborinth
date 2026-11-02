@@ -142,7 +142,9 @@ class Jail(abc.ABC):
         cache_path: Path to a cache directory that jail backends that support
             mounts bind at the user's cache directory (`XDG_CACHE_HOME`,
             default `~/.cache`). If `None`, no such bind is made. The
-            directory must exist when the jail is run.
+            directory, and the destination directory unless the home
+            directory is masked, must exist when the jail is run: the
+            destination cannot be created inside the sandbox.
         home_path: Path to a directory that jail backends that support mounts
             bind at the user's home directory, masking the host home
             directory. If `None`, no such bind is made and the host home

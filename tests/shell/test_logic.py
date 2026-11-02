@@ -493,14 +493,20 @@ class TestBubblewrapJail:
         self, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Tool paths on PATH under the home directory should be bound."""
-        home = pathlib.Path.home()
+        # A fake home makes the test independent of the host environment:
+        # the parent of a `PATH` entry is only bound when it exists.
+        fake_home = tmp_path / "fake-home"
+        (fake_home / ".local" / "bin").mkdir(parents=True)
+        monkeypatch.setenv("HOME", str(fake_home))
+        monkeypatch.setenv(
+            "PATH", "/usr/bin" + os.pathsep + str(fake_home / ".local" / "bin")
+        )
         home_dir = tmp_path / "home"
-        monkeypatch.setenv("PATH", f"/usr/bin{os.pathsep}{home}/.local/bin")
         jail = BubblewrapJail(workdir_path=tmp_path, home_path=home_dir)
 
         result = jail.build_command(args=["echo", "test"])
 
-        tool_bind = ["--ro-bind", str(home / ".local"), str(home / ".local")]
+        tool_bind = ["--ro-bind", str(fake_home / ".local"), str(fake_home / ".local")]
         assert any(result[i : i + 3] == tool_bind for i in range(len(result) - 2))
 
     def test_build_command_home_mount_precedes_other_binds(
@@ -857,31 +863,47 @@ class TestBubblewrapJailIntegration:
         assert write_result.returncode == 0
         assert read_result.returncode == 0
 
-    def test_can_write_to_cache_path(self, tmp_path: pathlib.Path) -> None:
+    def test_can_write_to_cache_path(
+        self,
+        tmp_path: pathlib.Path,
+        tmp_path_factory: pytest.TempPathFactory,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
         """With a cache_path configured, the user cache dir should be it."""
+        # The cache destination is placed next to the working directory, not
+        # inside it: the working directory bind is applied after the cache
+        # bind and would shadow it. It is also outside the host's cache
+        # directory, so the test does not depend on the host having one:
+        # bwrap cannot create the destination inside the sandbox, where the
+        # root filesystem is read-only.
+        xdg_cache = tmp_path_factory.mktemp("xdg-cache")
+        monkeypatch.setenv("XDG_CACHE_HOME", str(xdg_cache))
         cache = tmp_path / "cache"
         cache.mkdir()
         jail = BubblewrapJail(workdir_path=tmp_path, cache_path=cache)
 
-        cache_dest = os.environ.get("XDG_CACHE_HOME") or str(
-            pathlib.Path.home() / ".cache"
-        )
-        result = jail.run(args=["touch", f"{cache_dest}/probe"])
+        result = jail.run(args=["touch", f"{xdg_cache}/probe"])
 
         assert result.returncode == 0
         assert (cache / "probe").exists()
 
-    def test_cache_path_persists_across_runs(self, tmp_path: pathlib.Path) -> None:
+    def test_cache_path_persists_across_runs(
+        self,
+        tmp_path: pathlib.Path,
+        tmp_path_factory: pytest.TempPathFactory,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
         """Cached data in cache_path should persist across jail invocations."""
+        # See `test_can_write_to_cache_path` for the choice of the cache
+        # destination.
+        xdg_cache = tmp_path_factory.mktemp("xdg-cache")
+        monkeypatch.setenv("XDG_CACHE_HOME", str(xdg_cache))
         cache = tmp_path / "cache"
         cache.mkdir()
         jail = BubblewrapJail(workdir_path=tmp_path, cache_path=cache)
 
-        cache_dest = os.environ.get("XDG_CACHE_HOME") or str(
-            pathlib.Path.home() / ".cache"
-        )
-        write_result = jail.run(args=["touch", f"{cache_dest}/probe"])
-        read_result = jail.run(args=["test", "-e", f"{cache_dest}/probe"])
+        write_result = jail.run(args=["touch", f"{xdg_cache}/probe"])
+        read_result = jail.run(args=["test", "-e", f"{xdg_cache}/probe"])
 
         assert write_result.returncode == 0
         assert read_result.returncode == 0
@@ -955,7 +977,12 @@ class TestBubblewrapJailIntegration:
                 continue
             if not entry_path.is_dir():
                 continue
-            candidates = [f for f in entry_path.iterdir() if f.is_file()]
+            # Only executable files are tools; a `PATH` entry such as a
+            # virtual environment's `bin` directory also contains
+            # non-executable files.
+            candidates = [
+                f for f in entry_path.iterdir() if f.is_file() and os.access(f, os.X_OK)
+            ]
             if candidates:
                 tool = candidates[0]
                 break
