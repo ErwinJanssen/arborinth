@@ -121,9 +121,11 @@ class Project:
         directory is moved.
 
         The clone's submodules are initialized from their local object
-        stores in the original repository, nested ones included.
-        Submodules whose local store is missing in the original repository
-        are skipped with a warning.
+        stores in the original repository, nested ones included. Like the
+        clone's own `origin`, each initialized submodule's `origin`
+        points at its original store with a relative path. Submodules
+        whose local store is missing in the original repository are
+        skipped with a warning.
 
         Also adds the workspace's clone as a remote in the original repository
         with the name `arborinth/<workspace_name>`, allowing the original repo

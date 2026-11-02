@@ -14,6 +14,9 @@ and this project adheres to
   from the original repository's local submodule object stores, without
   network access. Submodules without a local store are skipped with a
   warning.
+- Each initialized submodule's `origin` remote points at its store with
+  a path relative to the submodule clone, so that fetching keeps working
+  when the repository directory is moved.
 
 ## v0.3.0 - 2026-11-02
 

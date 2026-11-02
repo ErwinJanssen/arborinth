@@ -25,6 +25,7 @@ untrusted processes run Git in the clone later.
 from __future__ import annotations
 
 import dataclasses
+import os
 import typing
 import warnings
 
@@ -148,6 +149,14 @@ def initialize_submodules(workspace: Workspace) -> None:
     is never passed to Git, so it cannot fall back to its recorded URL and
     the network.
 
+    After a level's submodules are initialized, each submodule clone's
+    `origin` remote is set to a path relative to the submodule clone,
+    pointing at the submodule's store in the original repository. Like for
+    the workspace clone's own `origin`, the relative path keeps the remote
+    working when the repository directory is moved; Git absolutizes
+    relative URLs at clone time, so the URL is replaced with `git remote
+    set-url` after the submodule is initialized.
+
     Args:
         workspace: The workspace whose clone's submodules to initialize.
 
@@ -181,6 +190,7 @@ def initialize_submodules(workspace: Workspace) -> None:
             _initialize_level(workspace, parent_worktree_path, submodules)
             for submodule in submodules:
                 worktree_path = parent_worktree_path / submodule.path
+                _set_relative_origin_url(workspace, submodule, worktree_path)
                 if submodule.children:
                     next_level.append((worktree_path, submodule.children))
         level = next_level
@@ -235,6 +245,38 @@ def _initialize_level(
         cwd=parent_worktree_path,
         error_message=(
             f"Failed to initialize the submodules of workspace '{workspace.name}'"
+        ),
+    )
+
+
+def _set_relative_origin_url(
+    workspace: Workspace,
+    submodule: Submodule,
+    worktree_path: pathlib.Path,
+) -> None:
+    """Set a submodule clone's `origin` remote URL to a relative path.
+
+    The submodule's clone stores the absolute `file://` URL of its object
+    store as its `origin` URL. This replaces it with a path relative to the
+    submodule clone, so that the workspace keeps working when the repository
+    directory is moved. This follows the pattern of
+    `Workspace.set_relative_origin_url` for the workspace clone itself.
+
+    Args:
+        workspace: The workspace whose clone's submodules to initialize.
+        submodule: The submodule whose clone's `origin` URL to set.
+        worktree_path: The working tree of the submodule's clone.
+
+    Raises:
+        RuntimeError: If Git is not installed or the command fails.
+    """
+    relative = os.path.relpath(submodule.store_path, worktree_path)
+    _util.run_git(
+        ["remote", "set-url", "origin", relative],
+        cwd=worktree_path,
+        error_message=(
+            f"Failed to set the origin URL of the submodule "
+            f"'{submodule.name}' of workspace '{workspace.name}'"
         ),
     )
 

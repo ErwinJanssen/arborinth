@@ -230,6 +230,10 @@ class Workspace:
         are initialized level by level, after the submodule they belong
         to.
 
+        Each initialized submodule's `origin` remote is set to a relative
+        path to its store in the original repository, so that the workspace
+        keeps working when the repository directory is moved.
+
         A submodule whose local store is missing in the original repository
         (it was never initialized there) is skipped together with its whole
         subtree and reported with a warning.

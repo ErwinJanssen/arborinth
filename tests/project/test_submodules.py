@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import typing
@@ -456,3 +457,76 @@ class TestNestedSubmodules:
         assert len(record) == 1
         outer_workdir_path = workspace.workdir_path / "vendor" / "outer"
         assert not (outer_workdir_path / "outer.txt").exists()
+
+
+class TestSubmoduleOrigins:
+    """Tests for the `origin` remotes of submodule clones."""
+
+    def test_submodule_origins_are_relative(self, tmp_path: pathlib.Path) -> None:
+        """Submodule origins should be relative paths to the original stores.
+
+        Git stores the overridden absolute `file://` URL of the store as the
+        clone's `origin` URL. It must be replaced with a path relative to the
+        submodule clone, like the workspace clone's own `origin`, so that the
+        remote keeps working when the repository directory is moved.
+        """
+        repo_path = make_repo_with_nested_submodules(tmp_path)
+        project = logic.Project(workdir=repo_path)
+
+        workspace = project.create_workspace("ws")
+
+        outer_workdir_path = workspace.workdir_path / "vendor" / "outer"
+        outer_store_path = repo_path / ".git" / "modules" / "outer"
+        assert run_git(outer_workdir_path, "remote", "get-url", "origin").strip() == (
+            os.path.relpath(outer_store_path, outer_workdir_path)
+        )
+
+        inner_workdir_path = outer_workdir_path / "lib" / "inner"
+        inner_store_path = (
+            repo_path / ".git" / "modules" / "outer" / "modules" / "inner"
+        )
+        assert run_git(inner_workdir_path, "remote", "get-url", "origin").strip() == (
+            os.path.relpath(inner_store_path, inner_workdir_path)
+        )
+
+    def test_fetch_works_after_repo_move(self, tmp_path: pathlib.Path) -> None:
+        """Submodule remotes should keep working after the repo is moved.
+
+        The `origin` remotes of the submodule clones are registered with
+        paths relative to the clones, so they resolve to the original
+        repository's module stores in the moved directory, not to the
+        directory the workspace was created in.
+        """
+        repo_path = make_repo_with_nested_submodules(tmp_path)
+        project = logic.Project(workdir=repo_path)
+        workspace = project.create_workspace("ws")
+
+        moved_path = tmp_path / "moved"
+        shutil.move(repo_path, moved_path)
+        moved_workdir_path = moved_path / workspace.workdir_path.relative_to(repo_path)
+
+        # `git fetch` from the top-level submodule clone and from the nested
+        # submodule clone, which sits in a subdirectory of its parent clone:
+        # the relative URLs resolve against each clone's own root, not
+        # against the directory the workspace was created in.
+        outer_workdir_path = moved_workdir_path / "vendor" / "outer"
+        outer_proc = subprocess.run(
+            ["git", "fetch", "origin"],
+            cwd=outer_workdir_path,
+            env=GIT_ENV,
+            capture_output=True,
+            check=False,
+            text=True,
+        )
+        assert outer_proc.returncode == 0, outer_proc.stderr
+
+        inner_workdir_path = outer_workdir_path / "lib" / "inner"
+        inner_proc = subprocess.run(
+            ["git", "fetch", "origin"],
+            cwd=inner_workdir_path,
+            env=GIT_ENV,
+            capture_output=True,
+            check=False,
+            text=True,
+        )
+        assert inner_proc.returncode == 0, inner_proc.stderr

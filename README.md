@@ -91,7 +91,9 @@ such as tool configuration.
 The clone includes the repository's submodules, nested ones included. They
 are initialized from the original repository's local submodule object
 stores, without network access; submodules without a local store are
-skipped with a warning.
+skipped with a warning. Each initialized submodule's `origin` remote
+points at its store with a path relative to the submodule clone, so the
+remote keeps working when the repository directory is moved.
 
 ### Shell
 
@@ -153,7 +155,7 @@ arborinth project info --workdir /path/to/dir
 The `workspace` subcommand provides operations for managing isolated workspaces.
 
 ```bash
-# Create a new workspace (clones the repository)
+# Create a new workspace (clones the repository and its submodules)
 arborinth workspace create my_workspace
 
 # Create a workspace in a specific project directory
