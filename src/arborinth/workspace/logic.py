@@ -8,10 +8,10 @@ repository.
 
 from __future__ import annotations
 
+import contextlib
 import dataclasses
 import os
 import shutil
-import subprocess
 import typing
 
 from arborinth import _util
@@ -19,6 +19,7 @@ from arborinth.shell import JailBackend, MountSpec
 
 if typing.TYPE_CHECKING:
     import pathlib
+    import subprocess
 
     from arborinth import Project
 
@@ -146,32 +147,14 @@ class Workspace:
         """
         relative = os.path.relpath(self.workdir_path, self.project.repo_root_path)
 
-        try:
-            subprocess.run(
-                [
-                    "git",
-                    "remote",
-                    "add",
-                    self.remote_name,
-                    relative,
-                ],
-                cwd=self.project.repo_root_path,
-                check=True,
-                capture_output=True,
-                text=True,
-            )
-        except subprocess.CalledProcessError as exc:
-            message = (
-                f"Failed to register remote '{self.remote_name}' in original repository: "  # noqa: E501
-                f"{exc.stderr.strip() if exc.stderr else 'unknown error'}"
-            )
-            raise RuntimeError(message) from exc
-        except FileNotFoundError as exc:
-            message = (
-                f"Cannot register remote '{self.remote_name}': "
-                f"Git is not installed or not found in PATH."
-            )
-            raise RuntimeError(message) from exc
+        _util.run_git(
+            ["remote", "add", self.remote_name, relative],
+            cwd=self.project.repo_root_path,
+            error_message=(
+                f"Failed to register remote '{self.remote_name}' in the "
+                f"original repository"
+            ),
+        )
 
     def set_relative_origin_url(self) -> None:
         """Set the clone's `origin` remote URL to a relative path.
@@ -188,26 +171,11 @@ class Workspace:
         """
         relative = os.path.relpath(self.project.repo_root_path, self.workdir_path)
 
-        try:
-            subprocess.run(
-                [
-                    "git",
-                    "remote",
-                    "set-url",
-                    "origin",
-                    relative,
-                ],
-                cwd=self.workdir_path,
-                check=True,
-                capture_output=True,
-                text=True,
-            )
-        except subprocess.CalledProcessError as exc:
-            message = (
-                f"Failed to set the origin URL for workspace '{self.name}': "
-                f"{exc.stderr.strip() if exc.stderr else 'unknown error'}"
-            )
-            raise RuntimeError(message) from exc
+        _util.run_git(
+            ["remote", "set-url", "origin", relative],
+            cwd=self.workdir_path,
+            error_message=(f"Failed to set the origin URL for workspace '{self.name}'"),
+        )
 
     def seed_commit_identity(self) -> None:
         """Seed the commit identity from the original repository into the clone.
@@ -225,14 +193,16 @@ class Workspace:
         """
         identity = {}
         for key in ("user.name", "user.email"):
-            # `git config --get` exits with a non-zero status when the key is
-            # not set, which is not an error here.
-            result = subprocess.run(
-                ["git", "config", "--get", key],
+            # `git config --get` exits with a non-zero status when the key
+            # is not set, which is not an error here. The environment is
+            # inherited rather than isolated: the identity to seed is the
+            # one the user commits with, which may live in the host's
+            # global Git configuration.
+            result = _util.run_git(
+                ["config", "--get", key],
                 cwd=self.project.repo_root_path,
-                capture_output=True,
                 check=False,
-                text=True,
+                isolated=False,
             )
             if result.returncode == 0:
                 identity[key] = result.stdout.strip()
@@ -240,22 +210,14 @@ class Workspace:
         if len(identity) < 2:  # noqa: PLR2004
             return
 
-        try:
-            for key, value in identity.items():
-                subprocess.run(
-                    ["git", "config", "--local", key, value],
-                    cwd=self.workdir_path,
-                    check=True,
-                    capture_output=True,
-                    text=True,
-                )
-        except subprocess.CalledProcessError as exc:
-            message = (
-                f"Failed to seed the commit identity for workspace "
-                f"'{self.name}': "
-                f"{exc.stderr.strip() if exc.stderr else 'unknown error'}"
+        for key, value in identity.items():
+            _util.run_git(
+                ["config", "--local", key, value],
+                cwd=self.workdir_path,
+                error_message=(
+                    f"Failed to seed the commit identity for workspace '{self.name}'"
+                ),
             )
-            raise RuntimeError(message) from exc
 
     def unregister_as_remote(self) -> None:
         """Unregister this workspace's remote from the original repository.
@@ -266,25 +228,13 @@ class Workspace:
         Silently ignores errors if the remote doesn't exist or git is
         unavailable.
         """
-        try:
-            subprocess.run(
-                [
-                    "git",
-                    "remote",
-                    "remove",
-                    self.remote_name,
-                ],
+        # Ignore a missing remote and Git being unavailable.
+        with contextlib.suppress(RuntimeError):
+            _util.run_git(
+                ["remote", "remove", self.remote_name],
                 cwd=self.project.repo_root_path,
-                check=True,
-                capture_output=True,
-                text=True,
+                check=False,
             )
-        except subprocess.CalledProcessError:
-            # Ignore errors if the remote doesn't exist
-            pass
-        except FileNotFoundError:
-            # Ignore if git is not available
-            pass
 
     def delete(self) -> None:
         """Delete this workspace.

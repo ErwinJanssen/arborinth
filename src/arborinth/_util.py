@@ -10,8 +10,83 @@ import json
 import os
 import shutil
 import string
+import subprocess
+import typing
 
 import click
+
+if typing.TYPE_CHECKING:
+    import pathlib
+
+
+def run_git(
+    args: typing.Sequence[str],
+    *,
+    cwd: pathlib.Path | None = None,
+    error_message: str | None = None,
+    isolated: bool = True,
+    check: bool = True,
+) -> subprocess.CompletedProcess[str]:
+    """Run a Git command.
+
+    By default the command runs with an environment isolated from the
+    host system's Git configuration, and a failure raises `RuntimeError`
+    with `error_message` as the prefix of its message. With `check=False`
+    the result is returned instead, and failures are reported only through
+    the return code, so callers that tolerate failure can ignore it. Pass
+    `isolated=False` to inherit the environment of the current process,
+    for commands that must read the host's Git configuration.
+
+    Args:
+        args: The arguments of the command, without the leading `git`.
+        cwd: The directory to run the command in, or `None` for the
+            current working directory.
+        error_message: The prefix of the message of the `RuntimeError`
+            raised when the command fails. A generic message is used when
+            omitted.
+        isolated: Whether to run the command with an environment
+            isolated from the host system's Git configuration.
+        check: Whether to raise `RuntimeError` when the command fails.
+
+    Returns:
+        The completed process, with its standard output and error
+        captured.
+
+    Raises:
+        RuntimeError: If `check` is true and Git is not installed or the
+            command fails.
+    """
+    env = (
+        # An environment isolated from the host system's Git
+        # configuration, for commands that must be reproducible and free
+        # of host state, and that must not prompt interactively.
+        {
+            "GIT_CONFIG_GLOBAL": "/dev/null",
+            "GIT_CONFIG_SYSTEM": "/dev/null",
+            "GIT_TERMINAL_PROMPT": "0",
+        }
+        if isolated
+        else None
+    )
+    prefix = error_message or "Failed to run Git"
+    try:
+        return subprocess.run(
+            ["git", *args],
+            cwd=cwd,
+            env=env,
+            capture_output=True,
+            check=check,
+            text=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        stderr = exc.stderr.strip() if exc.stderr else "unknown error"
+        message = f"{prefix}: {stderr}"
+        raise RuntimeError(message) from exc
+    except FileNotFoundError as exc:
+        # The raw error distinguishes a missing Git installation from a
+        # missing working directory.
+        message = f"{prefix}: {exc}"
+        raise RuntimeError(message) from exc
 
 
 class InfoFormat(enum.Enum):

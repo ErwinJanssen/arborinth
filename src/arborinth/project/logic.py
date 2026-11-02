@@ -164,20 +164,12 @@ class Project:
         workspace_path.mkdir()
         workdir_path = workspace_path / "workdir"
 
-        # Clone the repository into the workspace/workdir directory. Do not use
-        # the host system's Git configuration for improved isolation and
-        # reproducibility. Also disable terminal prompts to prevent interactive
-        # behavior.
-        env = {
-            "GIT_CONFIG_GLOBAL": "/dev/null",
-            "GIT_CONFIG_SYSTEM": "/dev/null",
-            "GIT_TERMINAL_PROMPT": "0",
-        }
-
+        # Clone the repository into the workspace/workdir directory. The
+        # command runs with an isolated Git configuration (`_util.run_git`),
+        # for improved isolation and reproducibility.
         try:
-            subprocess.run(
+            _util.run_git(
                 [
-                    "git",
                     "clone",
                     # Use `--no-local` to prevent hardlinks (ensures full copy
                     # for isolation)
@@ -186,28 +178,13 @@ class Project:
                     str(workdir_path),
                 ],
                 cwd=self.workdir,
-                env=env,
-                check=True,
-                capture_output=True,
-                text=True,
+                error_message=(f"Failed to clone repository into workspace '{name}'"),
             )
-        except subprocess.CalledProcessError as exc:
-            # Clean up the directory if clone failed
+        except RuntimeError:
+            # Clean up the workspace directory if the clone failed
             if workspace_path.exists():
                 shutil.rmtree(workspace_path)
-            message = (
-                f"Failed to clone repository into workspace '{name}': "
-                f"{exc.stderr.strip() if exc.stderr else 'unknown error'}"
-            )
-            raise RuntimeError(message) from exc
-        except FileNotFoundError as exc:
-            # Clean up the directory if the clone failed. Git availability is
-            # checked upfront, so the error has another cause, such as a
-            # missing working directory.
-            if workspace_path.exists():
-                shutil.rmtree(workspace_path)
-            message = f"Cannot clone repository for workspace '{name}': {exc}"
-            raise RuntimeError(message) from exc
+            raise
 
         # Create the Workspace instance (directory exists, validation passes)
         workspace = Workspace(name=name, project=self)
