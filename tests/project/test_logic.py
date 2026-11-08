@@ -6,7 +6,7 @@ import subprocess
 
 import pytest
 
-from arborinth import Workspace
+from arborinth import Workspace, _util
 from arborinth.project import logic
 from tests import INVALID_WORKSPACE_NAME_INPUTS
 
@@ -172,6 +172,31 @@ class TestCreateWorkspace:
 
         with pytest.raises(FileExistsError):
             tmp_project.create_workspace("duplicate")
+
+    def test_create_workspace_cleans_up_read_only_dirs_on_failure(
+        self,
+        tmp_project: logic.Project,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Cleanup after a failed clone also removes read-only directories."""
+
+        def fake_run_git(
+            args: list[str],
+            **kwargs: object,  # noqa: ARG001
+        ) -> subprocess.CompletedProcess:
+            workdir_path = pathlib.Path(args[-1])
+            locked = workdir_path.parent / "locked"
+            locked.mkdir()
+            locked.chmod(0o500)
+            message = "clone failed"
+            raise RuntimeError(message)
+
+        monkeypatch.setattr(_util, "run_git", fake_run_git)
+
+        with pytest.raises(RuntimeError, match="clone failed"):
+            tmp_project.create_workspace("doomed")
+
+        assert not (tmp_project.workspace_root_path / "doomed").exists()
 
     @pytest.mark.parametrize(**INVALID_WORKSPACE_NAME_INPUTS)
     def test_invalid_name_raises(

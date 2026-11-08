@@ -39,6 +39,10 @@ and this project adheres to
   `Permission denied`. On a permission error, `delete` restores the owner write
   permission on the affected directory and retries the removal.
 
+- The read-only-safe removal moved to `_util.rmtree` and is now also used to
+  clean up after a failed `Project.create_workspace`, so a partially created
+  workspace with read-only directories is removed reliably as well.
+
 ## v0.3.0 - 2026-11-02
 
 This release hardens the `bubblewrap` jail backend, gives workspaces their own

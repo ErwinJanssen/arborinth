@@ -5,18 +5,18 @@ This module provides validation utilities used across Arborinth.
 
 from __future__ import annotations
 
+import contextlib
 import enum
 import json
 import os
+import pathlib
 import shutil
+import stat
 import string
 import subprocess
 import typing
 
 import click
-
-if typing.TYPE_CHECKING:
-    import pathlib
 
 
 def run_git(
@@ -87,6 +87,41 @@ def run_git(
         # missing working directory.
         message = f"{prefix}: {exc}"
         raise RuntimeError(message) from exc
+
+
+def rmtree(path: pathlib.Path) -> None:
+    """Remove a directory tree, including read-only directories.
+
+    A process run inside a workspace can create read-only directories, for
+    example a tool that marks the files it installs immutable. `shutil.rmtree`
+    cannot remove the entries of a directory without write permission on that
+    directory, so on a `PermissionError` the owner permission bits are restored
+    on the failing directory and its parent, and the failed operation is
+    retried. Any other error is raised unchanged.
+
+    Args:
+        path: The directory tree to remove.
+
+    Raises:
+        OSError: If the tree cannot be removed.
+    """
+
+    def onexc(
+        func: typing.Callable[..., typing.Any],
+        failed_path: str,
+        exc: BaseException,
+    ) -> None:
+        if not isinstance(exc, PermissionError):
+            raise exc
+        failed = pathlib.Path(failed_path)
+        for target in (failed, failed.parent):
+            with contextlib.suppress(OSError):
+                mode = target.lstat().st_mode
+                if stat.S_ISDIR(mode):
+                    target.chmod(stat.S_IMODE(mode) | stat.S_IRWXU)
+        func(failed_path)
+
+    shutil.rmtree(path, onexc=onexc)
 
 
 class InfoFormat(enum.Enum):

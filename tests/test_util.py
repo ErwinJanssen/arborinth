@@ -1,6 +1,7 @@
 """Tests for the Arborinth utility functions."""
 
 import json
+import pathlib
 
 import pytest
 
@@ -137,3 +138,28 @@ class TestGetDefaultShell:
 
         with pytest.raises(FileNotFoundError, match="No shell binary available"):
             _util.get_default_shell()
+
+
+class TestRmtree:
+    """Tests for the `rmtree` utility."""
+
+    def test_removes_read_only_directories(self, tmp_path: pathlib.Path) -> None:
+        """Read-only directories inside the tree are removed as well."""
+        root = tmp_path / "tree"
+        locked = root / "locked" / "inner"
+        locked.mkdir(parents=True)
+        (locked / "data.txt").write_text("x")
+        locked.chmod(0o500)
+        (root / "locked").chmod(0o500)
+
+        _util.rmtree(root)
+
+        assert not root.exists()
+
+    def test_reraises_non_permission_errors(self, tmp_path: pathlib.Path) -> None:
+        """Errors other than permission errors are raised unchanged."""
+        file = tmp_path / "file"
+        file.write_text("x")
+
+        with pytest.raises(NotADirectoryError):
+            _util.rmtree(file)
