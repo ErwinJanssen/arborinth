@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Workspaces
+
+- `Workspace.delete` now also removes read-only directories. A process run
+  inside a workspace can create them, for example a tool that marks the files it
+  installs immutable, and removing them with a plain `shutil.rmtree` fails with
+  `Permission denied`. On a permission error, `delete` restores the owner write
+  permission on the affected directory and retries the removal.
+
 ## v0.3.0 - 2026-11-02
 
 This release hardens the `bubblewrap` jail backend, gives workspaces their own

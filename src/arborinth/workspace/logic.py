@@ -11,17 +11,53 @@ from __future__ import annotations
 import contextlib
 import dataclasses
 import os
+import pathlib
 import shutil
+import stat
 import typing
 
 from arborinth import _util
 from arborinth.shell import JailBackend, MountSpec
 
 if typing.TYPE_CHECKING:
-    import pathlib
     import subprocess
 
     from arborinth import Project
+
+
+def _rmtree(path: pathlib.Path) -> None:
+    """Remove a directory tree, including read-only directories.
+
+    A process run inside a workspace can create read-only directories, for
+    example a tool that marks the files it installs immutable. `shutil.rmtree`
+    cannot remove the entries of a directory without write permission on that
+    directory, so on a `PermissionError` the owner permission bits are restored
+    on the failing directory and its parent, and the failed operation is
+    retried. Any other error is raised unchanged.
+
+    Args:
+        path: The directory tree to remove.
+
+    Raises:
+        OSError: If the tree cannot be removed.
+    """
+
+    def onexc(
+        func: typing.Callable[..., typing.Any],
+        failed_path: str,
+        exc: BaseException,
+    ) -> None:
+        if not isinstance(exc, PermissionError):
+            raise exc
+        failed = pathlib.Path(failed_path)
+        for target in (failed, failed.parent):
+            with contextlib.suppress(OSError):
+                mode = target.lstat().st_mode
+                if stat.S_ISDIR(mode):
+                    target.chmod(stat.S_IMODE(mode) | stat.S_IRWXU)
+        func(failed_path)
+
+    shutil.rmtree(path, onexc=onexc)
 
 
 @dataclasses.dataclass
@@ -240,8 +276,11 @@ class Workspace:
         """Delete this workspace.
 
         Removes the workspace directory from the filesystem, including all its
-        contents. Also removes the corresponding remote from the original
-        repository if it exists.
+        contents. Read-only directories inside the workspace are removed as
+        well: a process run in the workspace may have created them, and a plain
+        `shutil.rmtree` would fail on them with `Permission denied`. Also
+        removes the corresponding remote from the original repository if it
+        exists.
 
         Raises:
             FileNotFoundError: If the workspace directory does not exist.
@@ -253,7 +292,7 @@ class Workspace:
 
         self.unregister_as_remote()
 
-        shutil.rmtree(self.root_path)
+        _rmtree(self.root_path)
 
     def shell(
         self,
