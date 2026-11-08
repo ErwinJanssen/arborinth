@@ -183,7 +183,7 @@ class Project:
         except RuntimeError:
             # Clean up the workspace directory if the clone failed
             if workspace_path.exists():
-                shutil.rmtree(workspace_path)
+                _util.rmtree(workspace_path)
             raise
 
         # Create the Workspace instance (directory exists, validation passes)
@@ -199,7 +199,7 @@ class Project:
         except RuntimeError:
             # Clean up the workspace directory if any step failed
             if workspace_path.exists():
-                shutil.rmtree(workspace_path)
+                _util.rmtree(workspace_path)
             raise
 
         return workspace
