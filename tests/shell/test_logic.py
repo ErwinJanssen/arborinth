@@ -175,6 +175,32 @@ class TestNoneJail:
 
         assert proc.returncode == 0
 
+    def test_run_with_capture_output_returns_stdout_as_text(
+        self, tmp_path: pathlib.Path
+    ) -> None:
+        """`capture_output=True` captures stdout and stderr as text."""
+        jail = NoneJail(workdir_path=tmp_path)
+
+        proc = jail.run(
+            args=["sh", "-c", "echo out; echo err >&2"], capture_output=True
+        )
+
+        assert proc.returncode == 0
+        assert proc.stdout == "out\n"
+        assert proc.stderr == "err\n"
+
+    def test_run_without_capture_output_has_no_stdout(
+        self, tmp_path: pathlib.Path
+    ) -> None:
+        """By default stdout and stderr are not captured."""
+        jail = NoneJail(workdir_path=tmp_path)
+
+        proc = jail.run(args=["echo", "hello"])
+
+        assert proc.returncode == 0
+        assert proc.stdout is None
+        assert proc.stderr is None
+
     def test_run_with_no_args_uses_default_shell(
         self, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -972,6 +998,15 @@ class TestBubblewrapJailIntegration:
             env={"ARBORINTH_TEST_VAR": "hello"},
         )
         assert result.returncode == 0
+
+    def test_run_with_capture_output_captures_inside_the_sandbox(
+        self, tmp_path: pathlib.Path
+    ) -> None:
+        """`capture_output=True` captures the sandbox process's stdout."""
+        jail = BubblewrapJail(workdir_path=tmp_path)
+        result = jail.run(args=["echo", "hello"], capture_output=True)
+        assert result.returncode == 0
+        assert result.stdout == "hello\n"
 
     def test_run_runtime_dir_exists_when_configured(
         self, tmp_path: pathlib.Path

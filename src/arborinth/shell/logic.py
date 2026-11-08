@@ -165,11 +165,14 @@ class Jail(abc.ABC):
         args: typing.Sequence[str] | None = None,
         *,
         env: dict[str, str] | None = None,
+        capture_output: bool = False,
     ) -> subprocess.CompletedProcess:
         """Run a shell session or command inside the jail's workdir.
 
-        The process's stdout and stderr are not captured (allowing for
-        interactive use) and the exit code is not checked.
+        By default the process's stdout and stderr are not captured, allowing
+        for interactive use. With `capture_output=True` they are captured and
+        returned as text on the result, for unattended runs. The exit code is
+        not checked.
 
         Args:
             args: The command to run. If no args are provided, the default shell
@@ -178,10 +181,13 @@ class Jail(abc.ABC):
             env: Additional environment variables for the process, merged over
                 the current environment. If `None`, the environment is
                 inherited unchanged.
+            capture_output: Whether to capture stdout and stderr of the
+                process as text.
 
         Returns:
             A `subprocess.CompletedProcess` object containing the process
-            metadata, including the return code.
+            metadata, including the return code, and stdout and stderr when
+            captured.
 
         Raises:
             FileNotFoundError: If the shell or command is not found in `$PATH`.
@@ -196,8 +202,10 @@ class Jail(abc.ABC):
             # Do not raise an exception if the command fails in order to
             # propagate the exit code.
             check=False,
-            # Do not capture the output because the shell should be interactive.
-            capture_output=False,
+            # Capture the output only for unattended runs; by default the
+            # shell should be interactive.
+            capture_output=capture_output,
+            text=capture_output,
             # Merge the extra variables over the inherited environment.
             env={**os.environ, **env} if env is not None else None,
         )
@@ -241,6 +249,7 @@ class NoneJail(Jail):
         args: typing.Sequence[str] | None = None,
         *,
         env: dict[str, str] | None = None,
+        capture_output: bool = False,
     ) -> subprocess.CompletedProcess:
         """Start a shell session or run a command directly on the host.
 
@@ -250,18 +259,23 @@ class NoneJail(Jail):
         If no args are provided, the default shell is used (see
         `arborinth._util.get_default_shell()` for resolution order).
 
-        The process's stdout and stderr are not captured (allowing for
-        interactive use) and the exit code is not checked.
+        By default the process's stdout and stderr are not captured, allowing
+        for interactive use. With `capture_output=True` they are captured and
+        returned as text on the result, for unattended runs. The exit code is
+        not checked.
 
         Args:
             args: The command to run.
             env: Additional environment variables for the process, merged over
                 the current environment. If `None`, the environment is
                 inherited unchanged.
+            capture_output: Whether to capture stdout and stderr of the
+                process as text.
 
         Returns:
             A `subprocess.CompletedProcess` object containing the process
-            metadata, including the return code.
+            metadata, including the return code, and stdout and stderr when
+            captured.
 
         Raises:
             FileNotFoundError: If the shell or command is not found in `$PATH`.
@@ -276,8 +290,10 @@ class NoneJail(Jail):
             # Do not raise an exception if the command fails in order to
             # propagate the exit code.
             check=False,
-            # Do not capture the output because the shell should be interactive.
-            capture_output=False,
+            # Capture the output only for unattended runs; by default the
+            # shell should be interactive.
+            capture_output=capture_output,
+            text=capture_output,
             # Merge the extra variables over the inherited environment.
             env={**os.environ, **env} if env is not None else None,
         )

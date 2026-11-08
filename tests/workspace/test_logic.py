@@ -247,6 +247,14 @@ class TestWorkspaceShell:
         )
         assert proc.returncode == 0
 
+    def test_shell_with_capture_output_returns_the_output(
+        self, tmp_workspace: Workspace
+    ) -> None:
+        """`shell` with `capture_output=True` should capture stdout."""
+        proc = tmp_workspace.shell(args=["echo", "hello"], capture_output=True)
+        assert proc.returncode == 0
+        assert proc.stdout == "hello\n"
+
     def test_shell_creates_tmp_dir_on_demand(self, tmp_workspace: Workspace) -> None:
         """`shell` should create the workspace tmp directory if it is missing.
 
@@ -289,6 +297,7 @@ class TestWorkspaceShell:
             args: typing.Sequence[str] | None = None,
             *,
             env: dict[str, str] | None = None,  # noqa: ARG001
+            capture_output: bool = False,  # noqa: ARG001
         ) -> subprocess.CompletedProcess:
             """Mock `Jail.run` to capture the built jail command."""
             captured["command"] = list(jail.build_command(args))
@@ -315,6 +324,7 @@ class TestWorkspaceShell:
             args: typing.Sequence[str] | None = None,
             *,
             env: dict[str, str] | None = None,  # noqa: ARG001
+            capture_output: bool = False,  # noqa: ARG001
         ) -> subprocess.CompletedProcess:
             """Mock `Jail.run` to capture the built jail command."""
             captured["command"] = list(jail.build_command(args))
@@ -344,6 +354,7 @@ class TestWorkspaceShell:
             args: typing.Sequence[str] | None = None,
             *,
             env: dict[str, str] | None = None,  # noqa: ARG001
+            capture_output: bool = False,  # noqa: ARG001
         ) -> subprocess.CompletedProcess:
             """Mock `Jail.run` to capture the built jail command."""
             captured["command"] = list(jail.build_command(args))
