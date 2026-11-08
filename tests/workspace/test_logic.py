@@ -168,6 +168,25 @@ class TestWorkspaceDelete:
         )
         assert remote_name not in proc.stdout
 
+    def test_delete_workspace_with_read_only_directories(
+        self, tmp_project: Project
+    ) -> None:
+        """`delete` should remove read-only directories inside the workspace.
+
+        A process run in the workspace can create read-only directories, which a
+        plain `shutil.rmtree` cannot remove.
+        """
+        workspace = tmp_project.create_workspace("read_only")
+        locked = workspace.home_path / "locked" / "inner"
+        locked.mkdir(parents=True)
+        (locked / "data.txt").write_text("x")
+        (workspace.home_path / "locked").chmod(0o500)
+        locked.chmod(0o500)
+
+        workspace.delete()
+
+        assert not workspace.root_path.exists()
+
 
 class TestWorkspaceShell:
     """Tests for the `shell` method."""
