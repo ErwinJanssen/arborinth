@@ -8,6 +8,17 @@ and this project adheres to
 
 ## Unreleased
 
+### `bubblewrap` jail backend
+
+- Host sockets under `/run` are now masked individually, by binding `/dev/null`
+  read-only over each socket file, instead of replacing all of `/run` with a
+  tmpfs. Masking the whole directory broke jails on systems where
+  `/etc/resolv.conf` is a symlink into `/run` (systemd-resolved): bubblewrap
+  resolves bind-mount sources inside the sandbox, so re-binding the resolver
+  file after masking failed with `No such file or directory` and the jail did
+  not start at all. Socket masking keeps the resolver symlink working through
+  the root bind.
+
 ### Workspaces
 
 - `Workspace.delete` now also removes read-only directories. A process run

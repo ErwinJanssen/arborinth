@@ -11,6 +11,7 @@ import dataclasses
 import enum
 import os
 import pathlib
+import stat
 import subprocess
 import typing
 
@@ -294,8 +295,9 @@ class BubblewrapJail(Jail):
     `cache_path` is set, that directory is bound read-write at the user's cache
     directory. If `home_path` is set, that directory is bound read-write at the
     user's home directory, masking the host home directory, and tool paths on
-    `PATH` under it are bound read-only. `/run` is masked with a fresh tmpfs,
-    so that host sockets are not reachable from the sandbox.
+    `PATH` under it are bound read-only. Host sockets under `/run` are masked
+    by binding `/dev/null` over each of them, so that host sockets are not
+    reachable from the sandbox.
 
     Security note: This provides isolation but NOT security. A malicious process
     can still read sensitive files from the host.
@@ -328,30 +330,43 @@ class BubblewrapJail(Jail):
         return []
 
     @staticmethod
-    def _run_mask_specs(
-        run: pathlib.Path = pathlib.Path("/run"),
-        resolv_conf: pathlib.Path = pathlib.Path("/etc/resolv.conf"),
-    ) -> list[MountSpec]:
-        """Return mount specs that mask the given runtime directory.
+    def _run_mask_specs(run: pathlib.Path = pathlib.Path("/run")) -> list[MountSpec]:
+        """Return mount specs that make host sockets under `run` unreachable.
 
-        The directory is replaced by a fresh tmpfs, so that files in it, such
-        as host socket files, are not reachable from the sandbox.
+        Each socket file under `run` is masked by binding `/dev/null`
+        read-only over it, so that host sockets such as the ssh-agent and
+        D-Bus cannot be connected from the sandbox. Masking the whole
+        directory with a tmpfs is not an option: bind-mount sources are
+        resolved inside the sandbox, so a resolver configuration that is a
+        symlink into the runtime directory (as on systemd-resolved systems)
+        could no longer be re-bound after masking, and the jail would fail to
+        start. Masking only the sockets leaves such symlinks working through
+        the root bind.
 
-        DNS is kept working when `resolv_conf` is a symlink into the masked
-        directory, as on systems using systemd-resolved: the file it points to
-        is bound read-only at its real location, so that the symlink inside the
-        sandbox still resolves.
+        The user's runtime directory (`XDG_RUNTIME_DIR`), when it lies under
+        `run`, is still replaced by a fresh tmpfs, because tools expect it to
+        exist.
 
         Args:
-            run: The runtime directory to mask.
-            resolv_conf: The path of the resolver configuration.
+            run: The runtime directory whose sockets should be masked.
 
         Returns:
             A list of mount specs.
         """
-        specs = [MountSpec(mount_type=MountType.TMPFS, source=None, dest=run)]
+        specs: list[MountSpec] = []
+        for dirpath, _dirnames, filenames in os.walk(run, followlinks=False):
+            for name in filenames:
+                path = pathlib.Path(dirpath) / name
+                if stat.S_ISSOCK(os.lstat(path).st_mode):
+                    specs.append(
+                        MountSpec(
+                            mount_type=MountType.RO,
+                            source=pathlib.Path("/dev/null"),
+                            dest=path,
+                        )
+                    )
 
-        # The runtime directory of the user usually points into the masked
+        # The runtime directory of the user usually points into the runtime
         # directory. Provide an empty one, because tools expect it to exist.
         runtime_dir = os.environ.get("XDG_RUNTIME_DIR")
         if runtime_dir is not None and pathlib.Path(runtime_dir).is_relative_to(run):
@@ -362,15 +377,6 @@ class BubblewrapJail(Jail):
                     dest=pathlib.Path(runtime_dir),
                 )
             )
-
-        # Keep DNS working when the resolver configuration is a symlink into
-        # the masked directory, as on systems using systemd-resolved.
-        if resolv_conf.is_symlink():
-            target = resolv_conf.resolve()
-            if target.is_relative_to(run):
-                specs.append(
-                    MountSpec(mount_type=MountType.RO, source=target, dest=target)
-                )
 
         return specs
 

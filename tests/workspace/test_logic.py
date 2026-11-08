@@ -369,6 +369,22 @@ class TestWorkspaceShellJail:
         assert proc.returncode == 0
         assert (tmp_workspace.tmp_path / probe).exists()
 
+    def test_shell_bubblewrap_starts_with_resolv_conf_symlinked_into_run(
+        self, tmp_workspace: Workspace
+    ) -> None:
+        """The jail starts and the resolver config is readable inside it.
+
+        On systemd-resolved systems `/etc/resolv.conf` is a symlink into `/run`.
+        Masking `/run` with a tmpfs used to break such setups: bubblewrap
+        resolves bind-mount sources inside the sandbox, so the re-bind of the
+        resolver file failed and the jail did not start.
+        """
+        proc = tmp_workspace.shell(
+            args=["sh", "-c", "test -s /etc/resolv.conf"],
+            jail_backend=JailBackend.BUBBLEWRAP,
+        )
+        assert proc.returncode == 0
+
     def test_shell_bubblewrap_writes_to_workspace_cache(
         self, tmp_workspace: Workspace
     ) -> None:
