@@ -14,6 +14,10 @@ and this project adheres to
   environment variables (`env=` in Python, `--env KEY=VALUE` on the CLI), merged
   over the current environment, so a single run can be configured without
   changing any files.
+- `Workspace.shell` and `Jail.run` accept `capture_output=True`, which captures
+  the process's stdout and stderr as text on the returned
+  `subprocess.CompletedProcess`, for unattended runs. The default is unchanged:
+  output is streamed for interactive use.
 
 ### Workspaces
 
