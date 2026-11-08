@@ -327,9 +327,10 @@ class BubblewrapJail(Jail):
     `cache_path` is set, that directory is bound read-write at the user's cache
     directory. If `home_path` is set, that directory is bound read-write at the
     user's home directory, masking the host home directory, and tool paths on
-    `PATH` under it are bound read-only. Host sockets under `/run` are masked
-    by binding `/dev/null` over each of them, so that host sockets are not
-    reachable from the sandbox.
+    `PATH` under it are bound read-only. Subdirectories of `/run` are replaced
+    by fresh tmpfs mounts and visible socket files are masked with `/dev/null`,
+    so that host sockets are not reachable from the sandbox while a resolver
+    configuration symlinked into `/run` keeps working.
 
     Security note: This provides isolation but NOT security. A malicious process
     can still read sensitive files from the host.
@@ -362,34 +363,86 @@ class BubblewrapJail(Jail):
         return []
 
     @staticmethod
-    def _run_mask_specs(run: pathlib.Path = pathlib.Path("/run")) -> list[MountSpec]:
-        """Return mount specs that make host sockets under `run` unreachable.
+    def _run_keep_dirs(
+        run: pathlib.Path,
+        resolv_conf: pathlib.Path,
+        runtime_dir: str | None,
+    ) -> set[pathlib.Path]:
+        """Directories under `run` that must stay visible in the sandbox.
 
-        Each socket file under `run` is masked by binding `/dev/null`
-        read-only over it, so that host sockets such as the ssh-agent and
-        D-Bus cannot be connected from the sandbox. Masking the whole
-        directory with a tmpfs is not an option: bind-mount sources are
-        resolved inside the sandbox, so a resolver configuration that is a
-        symlink into the runtime directory (as on systemd-resolved systems)
-        could no longer be re-bound after masking, and the jail would fail to
-        start. Masking only the sockets leaves such symlinks working through
-        the root bind.
+        These are the chain from `run` down to the resolver target (when
+        `resolv_conf` is a symlink into `run`, as on systemd-resolved systems,
+        so that the symlink keeps resolving through the root bind) and the
+        chain down to the user's runtime directory.
+
+        Args:
+            run: The runtime directory.
+            resolv_conf: The path of the resolver configuration.
+            runtime_dir: The value of `XDG_RUNTIME_DIR`, if set and under `run`.
+
+        Returns:
+            The set of directories to keep visible.
+        """
+        keep: set[pathlib.Path] = set()
+        if resolv_conf.is_symlink():
+            target = resolv_conf.resolve()
+            if target.is_relative_to(run):
+                keep.update(target.parent.parents)
+                keep.add(target.parent)
+        if runtime_dir is not None and pathlib.Path(runtime_dir).is_relative_to(run):
+            runtime_path = pathlib.Path(runtime_dir)
+            keep.update(runtime_path.parents)
+            keep.add(runtime_path)
+        return keep
+
+    @staticmethod
+    def _run_mask_specs(
+        run: pathlib.Path = pathlib.Path("/run"),
+        resolv_conf: pathlib.Path = pathlib.Path("/etc/resolv.conf"),
+    ) -> list[MountSpec]:
+        """Return mount specs that hide the host's runtime directory contents.
+
+        Every subdirectory of `run` that does not have to stay visible (see
+        `_run_keep_dirs`) is replaced by a fresh tmpfs, so that files created
+        inside it later are hidden as well. Each socket file that stays
+        visible is masked by binding `/dev/null` read-only over it, so that
+        host sockets such as the ssh-agent and D-Bus cannot be connected from
+        the sandbox.
+
+        Masking `run` itself with one tmpfs is not an option: bind-mount
+        sources are resolved inside the sandbox, so a resolver configuration
+        that is a symlink into the runtime directory could no longer be
+        re-bound after masking, and the jail would fail to start.
 
         The user's runtime directory (`XDG_RUNTIME_DIR`), when it lies under
-        `run`, is still replaced by a fresh tmpfs, because tools expect it to
+        `run`, also gets a fresh tmpfs of its own, because tools expect it to
         exist.
 
         Args:
-            run: The runtime directory whose sockets should be masked.
+            run: The runtime directory to mask.
+            resolv_conf: The path of the resolver configuration.
 
         Returns:
             A list of mount specs.
         """
+        runtime_dir = os.environ.get("XDG_RUNTIME_DIR")
+        runtime_path = (
+            pathlib.Path(runtime_dir)
+            if runtime_dir is not None and pathlib.Path(runtime_dir).is_relative_to(run)
+            else None
+        )
+        keep = BubblewrapJail._run_keep_dirs(run, resolv_conf, runtime_dir)
+
         specs: list[MountSpec] = []
-        for dirpath, _dirnames, filenames in os.walk(run, followlinks=False):
+        walk = os.walk(run, topdown=True, followlinks=False)
+        for dirpath, dirnames, filenames in walk:
+            here = pathlib.Path(dirpath)
+            visible = here == run or here in keep
             for name in filenames:
-                path = pathlib.Path(dirpath) / name
-                if stat.S_ISSOCK(os.lstat(path).st_mode):
+                path = here / name
+                # Sockets inside masked directories are hidden by the tmpfs;
+                # sockets in visible directories are masked individually.
+                if visible and stat.S_ISSOCK(os.lstat(path).st_mode):
                     specs.append(
                         MountSpec(
                             mount_type=MountType.RO,
@@ -397,17 +450,21 @@ class BubblewrapJail(Jail):
                             dest=path,
                         )
                     )
-
-        # The runtime directory of the user usually points into the runtime
-        # directory. Provide an empty one, because tools expect it to exist.
-        runtime_dir = os.environ.get("XDG_RUNTIME_DIR")
-        if runtime_dir is not None and pathlib.Path(runtime_dir).is_relative_to(run):
-            specs.append(
-                MountSpec(
-                    mount_type=MountType.TMPFS,
-                    source=None,
-                    dest=pathlib.Path(runtime_dir),
+            for name in list(dirnames):
+                path = here / name
+                if path in keep:
+                    continue
+                specs.append(
+                    MountSpec(mount_type=MountType.TMPFS, source=None, dest=path)
                 )
+                # The directory is masked, so there is no need to descend.
+                dirnames.remove(name)
+
+        # The user's runtime directory usually points into the runtime
+        # directory. Provide an empty one, because tools expect it to exist.
+        if runtime_path is not None:
+            specs.append(
+                MountSpec(mount_type=MountType.TMPFS, source=None, dest=runtime_path)
             )
 
         return specs

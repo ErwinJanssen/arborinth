@@ -5,7 +5,6 @@ from __future__ import annotations
 import os
 import pathlib
 import socket
-import stat
 import subprocess
 import typing
 
@@ -335,8 +334,8 @@ class TestBubblewrapJail:
         jail = BubblewrapJail(workdir_path=tmp_path)
         assert isinstance(jail, Jail)
 
-    def test_build_command_masks_run_sockets(self, tmp_path: pathlib.Path) -> None:
-        """`build_command` should mask each socket under `/run` with /dev/null."""
+    def test_build_command_masks_run(self, tmp_path: pathlib.Path) -> None:
+        """`build_command` should mask `/run` contents via `_run_mask_specs`."""
         jail = BubblewrapJail(workdir_path=tmp_path)
 
         result = jail.build_command(args=["echo", "test"])
@@ -347,15 +346,16 @@ class TestBubblewrapJail:
         assert not any(
             result[i : i + 2] == ["--tmpfs", "/run"] for i in range(len(result) - 1)
         )
-        sockets = [
-            pathlib.Path(dirpath) / name
-            for dirpath, _dirnames, filenames in os.walk("/run")
-            for name in filenames
-            if stat.S_ISSOCK(os.lstat(pathlib.Path(dirpath) / name).st_mode)
-        ]
-        for sock in sockets:
-            mask = ["--ro-bind", "/dev/null", str(sock)]
-            assert any(result[i : i + 3] == mask for i in range(len(result) - 2))
+        for spec in BubblewrapJail._run_mask_specs():
+            if spec.mount_type is MountType.TMPFS:
+                expected = ["--tmpfs", str(spec.dest)]
+            else:
+                source = str(spec.source) if spec.source else str(spec.dest)
+                expected = ["--ro-bind", source, str(spec.dest)]
+            assert any(
+                result[i : i + len(expected)] == expected
+                for i in range(len(result) - len(expected) + 1)
+            ), f"missing {expected}"
 
     @pytest.mark.parametrize(
         "runtime_dir",
@@ -619,65 +619,96 @@ class TestRunMaskSpecs:
         sock.bind(str(path))
         sock.close()
 
-    def test_sockets_under_run_are_masked(self, tmp_path: pathlib.Path) -> None:
-        """Each socket under the runtime dir is masked with /dev/null."""
+    @staticmethod
+    def _make_run(tmp_path: pathlib.Path) -> pathlib.Path:
+        """Create a fake runtime dir with a socket, a subdir, and a stub."""
         run = tmp_path / "run"
-        sock_path = run / "dbus" / "socket"
-        sock_path.parent.mkdir(parents=True)
-        self._make_socket(sock_path)
+        dbus = run / "dbus"
+        dbus.mkdir(parents=True)
+        TestRunMaskSpecs._make_socket(dbus / "socket")
+        resolve = run / "systemd" / "resolve"
+        resolve.mkdir(parents=True)
+        (resolve / "stub-resolv.conf").touch()
+        TestRunMaskSpecs._make_socket(run / "top-level.sock")
         (run / "regular-file").touch()
+        return run
 
-        result = BubblewrapJail._run_mask_specs(run)
-
-        expected = MountSpec(
-            mount_type=MountType.RO,
-            source=pathlib.Path("/dev/null"),
-            dest=sock_path,
-        )
-        assert result == [expected]
-
-    def test_regular_files_under_run_are_not_masked(
+    def test_subdirs_masked_and_visible_sockets_covered(
         self, tmp_path: pathlib.Path
     ) -> None:
-        """Non-socket files stay visible through the root bind.
+        """Subdirs get a tmpfs; sockets that stay visible get /dev/null."""
+        run = self._make_run(tmp_path)
+        resolv_conf = tmp_path / "resolv.conf"
+        resolv_conf.touch()
 
-        In particular a resolver configuration symlinked into the runtime
-        directory keeps resolving, because the runtime directory itself is not
-        masked.
-        """
-        run = tmp_path / "run"
-        (run / "systemd" / "resolve").mkdir(parents=True)
-        stub = run / "systemd" / "resolve" / "stub-resolv.conf"
-        stub.touch()
+        result = BubblewrapJail._run_mask_specs(run, resolv_conf)
 
-        result = BubblewrapJail._run_mask_specs(run)
+        expected = [
+            MountSpec(
+                mount_type=MountType.RO,
+                source=pathlib.Path("/dev/null"),
+                dest=run / "top-level.sock",
+            ),
+            MountSpec(mount_type=MountType.TMPFS, source=None, dest=run / "dbus"),
+            MountSpec(mount_type=MountType.TMPFS, source=None, dest=run / "systemd"),
+        ]
+        assert result == expected
 
-        assert result == []
+    def test_resolv_symlink_into_run_keeps_its_dirs_visible(
+        self, tmp_path: pathlib.Path
+    ) -> None:
+        """The dirs on the path to a symlinked resolver target stay visible."""
+        run = self._make_run(tmp_path)
+        target = run / "systemd" / "resolve" / "stub-resolv.conf"
+        resolv_conf = tmp_path / "resolv.conf"
+        resolv_conf.symlink_to(target)
+
+        result = BubblewrapJail._run_mask_specs(run, resolv_conf)
+
+        expected = [
+            MountSpec(
+                mount_type=MountType.RO,
+                source=pathlib.Path("/dev/null"),
+                dest=run / "top-level.sock",
+            ),
+            MountSpec(mount_type=MountType.TMPFS, source=None, dest=run / "dbus"),
+        ]
+        assert result == expected
 
     def test_runtime_dir_under_run_masked(
         self, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """A runtime dir under the runtime dir should get its own tmpfs."""
-        run = tmp_path / "run"
+        run = self._make_run(tmp_path)
         runtime_dir = run / "user" / "1000"
+        runtime_dir.mkdir(parents=True)
         monkeypatch.setenv("XDG_RUNTIME_DIR", str(runtime_dir))
+        resolv_conf = tmp_path / "resolv.conf"
+        resolv_conf.touch()
 
-        result = BubblewrapJail._run_mask_specs(run)
+        result = BubblewrapJail._run_mask_specs(run, resolv_conf)
 
-        expected = [
-            MountSpec(mount_type=MountType.TMPFS, source=None, dest=runtime_dir),
-        ]
-        assert result == expected
+        tmpfs_dests = [s.dest for s in result if s.mount_type is MountType.TMPFS]
+        assert runtime_dir in tmpfs_dests
+        # The chain to the runtime dir stays visible so the path exists.
+        assert run / "user" not in tmpfs_dests
 
     def test_runtime_dir_outside_run_not_masked(
         self, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """A runtime dir outside the runtime dir should not get a tmpfs."""
         monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path / "runtime"))
+        run = self._make_run(tmp_path)
+        resolv_conf = tmp_path / "resolv.conf"
+        resolv_conf.touch()
 
-        result = BubblewrapJail._run_mask_specs(tmp_path / "run")
+        result = BubblewrapJail._run_mask_specs(run, resolv_conf)
 
-        assert result == []
+        assert all(
+            pathlib.Path(s.dest) != tmp_path / "runtime"
+            for s in result
+            if s.mount_type is MountType.TMPFS
+        )
 
 
 class TestToolMountSpecs:
