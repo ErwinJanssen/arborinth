@@ -98,6 +98,45 @@ class TestShellCommand:
         )
         assert result.exit_code == 1
 
+    def test_shell_env_option_sets_variables(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        cli_runner: click.testing.CliRunner,
+        tmp_workspace: Workspace,
+    ) -> None:
+        """`--env KEY=VALUE` should set the variable for the command."""
+        repo_root_path = tmp_workspace.project.repo_root_path
+        monkeypatch.chdir(repo_root_path)
+        result = cli_runner.invoke(
+            main,
+            [
+                "shell",
+                tmp_workspace.name,
+                "--env",
+                "ARBORINTH_TEST_VAR=hello",
+                "--",
+                "sh",
+                "-c",
+                'test "$ARBORINTH_TEST_VAR" = hello',
+            ],
+        )
+        assert result.exit_code == 0
+
+    def test_shell_env_option_rejects_a_value_without_equals(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        cli_runner: click.testing.CliRunner,
+        tmp_workspace: Workspace,
+    ) -> None:
+        """`--env` without KEY=VALUE should be a usage error."""
+        repo_root_path = tmp_workspace.project.repo_root_path
+        monkeypatch.chdir(repo_root_path)
+        result = cli_runner.invoke(
+            main,
+            ["shell", tmp_workspace.name, "--env", "no-equals-sign", "true"],
+        )
+        assert result.exit_code != 0
+
     def test_shell_with_workspace_only(
         self,
         monkeypatch: pytest.MonkeyPatch,

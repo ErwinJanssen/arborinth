@@ -54,13 +54,24 @@ class MountSpecParamType(click.ParamType):
         " Can be specified multiple times."
     ),
 )
+@click.option(
+    "--env",
+    "env_vars",
+    multiple=True,
+    metavar="KEY=VALUE",
+    help=(
+        "Set an environment variable for the command, merged over the current"
+        " environment. Can be specified multiple times."
+    ),
+)
 @click.pass_context
-def shell(
+def shell(  # noqa: PLR0913, PLR0917
     ctx: click.Context,
     workspace_name: str,
     args: tuple[str, ...],
     jail: JailBackend,
     mount: tuple[MountSpec, ...],
+    env_vars: tuple[str, ...],
 ) -> None:
     """Run a shell or command in a workspace.
 
@@ -86,8 +97,18 @@ def shell(
         message = str(exc)
         raise click.ClickException(message) from exc
 
+    env: dict[str, str] = {}
+    for item in env_vars:
+        key, sep, value = item.partition("=")
+        if not sep or not key:
+            message = f"Invalid --env value (expected KEY=VALUE): {item}"
+            raise click.BadParameter(message)
+        env[key] = value
+
     try:
-        proc = workspace.shell(args=args or None, jail_backend=jail, mount_specs=mount)
+        proc = workspace.shell(
+            args=args or None, jail_backend=jail, mount_specs=mount, env=env or None
+        )
     except FileNotFoundError as exc:
         message = str(exc)
         raise click.ClickException(message) from exc

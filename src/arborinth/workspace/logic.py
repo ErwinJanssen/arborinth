@@ -300,6 +300,7 @@ class Workspace:
         *,
         jail_backend: JailBackend = JailBackend.NONE,
         mount_specs: typing.Sequence[MountSpec] = (),
+        env: dict[str, str] | None = None,
     ) -> subprocess.CompletedProcess:
         """Run a shell or command in this workspace with the specified jail backend.
 
@@ -320,6 +321,9 @@ class Workspace:
                 shell.
             jail_backend: The jail backend to use.
             mount_specs: Additional mount specifications to pass to the jail.
+            env: Additional environment variables for the process, merged over
+                the current environment. If `None`, the environment is
+                inherited unchanged.
 
         Returns:
             A `subprocess.CompletedProcess` object containing the process
@@ -340,4 +344,4 @@ class Workspace:
             cache_path=self.cache_path,
             home_path=self.home_path,
             mount_specs=mount_specs,
-        ).run(args=args)
+        ).run(args=args, env=env)
