@@ -144,6 +144,35 @@ class TestNoneJail:
         assert proc.args == args
         assert proc.returncode == 0
 
+    def test_run_with_env_merges_over_the_current_environment(
+        self, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """`run` with `env` sets the variables and keeps the inherited ones."""
+        monkeypatch.delenv("ARBORINTH_TEST_VAR", raising=False)
+        jail = NoneJail(workdir_path=tmp_path)
+
+        proc = jail.run(
+            args=[
+                "sh",
+                "-c",
+                'test "$ARBORINTH_TEST_VAR" = hello && test -n "$PATH"',
+            ],
+            env={"ARBORINTH_TEST_VAR": "hello"},
+        )
+
+        assert proc.returncode == 0
+
+    def test_run_without_env_inherits_the_environment(
+        self, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Without `env`, the environment is inherited unchanged."""
+        monkeypatch.setenv("ARBORINTH_TEST_VAR", "inherited")
+        jail = NoneJail(workdir_path=tmp_path)
+
+        proc = jail.run(args=["sh", "-c", 'test "$ARBORINTH_TEST_VAR" = inherited'])
+
+        assert proc.returncode == 0
+
     def test_run_with_no_args_uses_default_shell(
         self, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -925,6 +954,15 @@ class TestBubblewrapJailIntegration:
 
         jail = BubblewrapJail(workdir_path=tmp_path)
         result = jail.run(args=["cat", "/etc/resolv.conf"])
+        assert result.returncode == 0
+
+    def test_run_with_env_reaches_the_sandbox(self, tmp_path: pathlib.Path) -> None:
+        """`env` variables passed to `run` are visible inside the sandbox."""
+        jail = BubblewrapJail(workdir_path=tmp_path)
+        result = jail.run(
+            args=["sh", "-c", 'test "$ARBORINTH_TEST_VAR" = hello'],
+            env={"ARBORINTH_TEST_VAR": "hello"},
+        )
         assert result.returncode == 0
 
     def test_run_runtime_dir_exists_when_configured(

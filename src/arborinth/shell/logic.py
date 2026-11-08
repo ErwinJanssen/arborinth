@@ -160,7 +160,10 @@ class Jail(abc.ABC):
     mount_specs: typing.Sequence[MountSpec] = ()
 
     def run(
-        self, args: typing.Sequence[str] | None = None
+        self,
+        args: typing.Sequence[str] | None = None,
+        *,
+        env: dict[str, str] | None = None,
     ) -> subprocess.CompletedProcess:
         """Run a shell session or command inside the jail's workdir.
 
@@ -171,6 +174,9 @@ class Jail(abc.ABC):
             args: The command to run. If no args are provided, the default shell
                 is used (see `arborinth._util.get_default_shell()` for
                 resolution order).
+            env: Additional environment variables for the process, merged over
+                the current environment. If `None`, the environment is
+                inherited unchanged.
 
         Returns:
             A `subprocess.CompletedProcess` object containing the process
@@ -191,6 +197,8 @@ class Jail(abc.ABC):
             check=False,
             # Do not capture the output because the shell should be interactive.
             capture_output=False,
+            # Merge the extra variables over the inherited environment.
+            env={**os.environ, **env} if env is not None else None,
         )
 
     @abc.abstractmethod
@@ -228,7 +236,10 @@ class NoneJail(Jail):
     """
 
     def run(
-        self, args: typing.Sequence[str] | None = None
+        self,
+        args: typing.Sequence[str] | None = None,
+        *,
+        env: dict[str, str] | None = None,
     ) -> subprocess.CompletedProcess:
         """Start a shell session or run a command directly on the host.
 
@@ -243,6 +254,9 @@ class NoneJail(Jail):
 
         Args:
             args: The command to run.
+            env: Additional environment variables for the process, merged over
+                the current environment. If `None`, the environment is
+                inherited unchanged.
 
         Returns:
             A `subprocess.CompletedProcess` object containing the process
@@ -263,6 +277,8 @@ class NoneJail(Jail):
             check=False,
             # Do not capture the output because the shell should be interactive.
             capture_output=False,
+            # Merge the extra variables over the inherited environment.
+            env={**os.environ, **env} if env is not None else None,
         )
 
     def build_command(

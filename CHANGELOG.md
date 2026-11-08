@@ -8,6 +8,13 @@ and this project adheres to
 
 ## Unreleased
 
+### Shell
+
+- `Workspace.shell`, `Jail.run` and the `arborinth shell` command accept extra
+  environment variables (`env=` in Python, `--env KEY=VALUE` on the CLI), merged
+  over the current environment, so a single run can be configured without
+  changing any files.
+
 ### Workspaces
 
 - `Workspace.delete` now also removes read-only directories. A process run

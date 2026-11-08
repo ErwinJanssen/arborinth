@@ -237,6 +237,16 @@ class TestWorkspaceShell:
         proc = tmp_workspace.shell(args=["echo", "test"], mount_specs=[mount])
         assert proc.returncode == 0
 
+    def test_shell_with_env_passes_variables_to_the_command(
+        self, tmp_workspace: Workspace
+    ) -> None:
+        """`shell` with `env` should pass the variables to the command."""
+        proc = tmp_workspace.shell(
+            args=["sh", "-c", 'test "$ARBORINTH_TEST_VAR" = hello'],
+            env={"ARBORINTH_TEST_VAR": "hello"},
+        )
+        assert proc.returncode == 0
+
     def test_shell_creates_tmp_dir_on_demand(self, tmp_workspace: Workspace) -> None:
         """`shell` should create the workspace tmp directory if it is missing.
 
@@ -277,6 +287,8 @@ class TestWorkspaceShell:
         def mock_run(
             jail: BubblewrapJail,
             args: typing.Sequence[str] | None = None,
+            *,
+            env: dict[str, str] | None = None,  # noqa: ARG001
         ) -> subprocess.CompletedProcess:
             """Mock `Jail.run` to capture the built jail command."""
             captured["command"] = list(jail.build_command(args))
@@ -301,6 +313,8 @@ class TestWorkspaceShell:
         def mock_run(
             jail: BubblewrapJail,
             args: typing.Sequence[str] | None = None,
+            *,
+            env: dict[str, str] | None = None,  # noqa: ARG001
         ) -> subprocess.CompletedProcess:
             """Mock `Jail.run` to capture the built jail command."""
             captured["command"] = list(jail.build_command(args))
@@ -328,6 +342,8 @@ class TestWorkspaceShell:
         def mock_run(
             jail: BubblewrapJail,
             args: typing.Sequence[str] | None = None,
+            *,
+            env: dict[str, str] | None = None,  # noqa: ARG001
         ) -> subprocess.CompletedProcess:
             """Mock `Jail.run` to capture the built jail command."""
             captured["command"] = list(jail.build_command(args))
